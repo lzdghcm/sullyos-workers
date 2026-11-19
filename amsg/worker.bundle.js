@@ -1481,7 +1481,7 @@ function pickStaleStoppedReplyKeys(rows, nowMs = Date.now(), protectKey) {
 // worker/amsg/src/index.ts
 import { DurableObject } from "cloudflare:workers";
 
-// node_modules/.pnpm/@rei-standard+amsg-server@3.1.0-next.1_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
+// ../../../../Desktop/3005大豪宅/糯米鸡/node_modules/.pnpm/@rei-standard+amsg-server@3_04a7d0876d4bfad11669a8b82156c2ad/node_modules/@rei-standard/amsg-server/dist/chunk-GN44PST5.mjs
 var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
   "user_id",
   "uuid",
@@ -1500,7 +1500,7 @@ var UPDATABLE_COLUMNS = /* @__PURE__ */ new Set([
 var TASK_DELIVERY_COLUMNS = "id, user_id, uuid, encrypted_payload, message_type, next_send_at, retry_after, status, retry_count";
 var TASK_DETAIL_COLUMNS = "id, user_id, uuid, encrypted_payload, message_type, next_send_at, status, retry_count, last_error, created_at, updated_at";
 
-// node_modules/.pnpm/@rei-standard+amsg-shared@0.4.0/node_modules/@rei-standard/amsg-shared/dist/index.mjs
+// ../../../../Desktop/3005大豪宅/糯米鸡/node_modules/.pnpm/@rei-standard+amsg-shared@0.4.0/node_modules/@rei-standard/amsg-shared/dist/index.mjs
 var TEXT_ENCODER = new TextEncoder();
 var TEXT_DECODER = new TextDecoder("utf-8", { fatal: false });
 function toUint8(buf) {
@@ -2693,7 +2693,7 @@ function stringifyDecisionForError(value) {
   }
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-server@3.1.0-next.1_@neondatabase+serverless@1.1.0_pg@8.22.0/node_modules/@rei-standard/amsg-server/dist/chunk-EIM3PKFY.mjs
+// ../../../../Desktop/3005大豪宅/糯米鸡/node_modules/.pnpm/@rei-standard+amsg-server@3_04a7d0876d4bfad11669a8b82156c2ad/node_modules/@rei-standard/amsg-server/dist/chunk-EIM3PKFY.mjs
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var MAX_LISTED_SKIPPED_OCCURRENCES = 32;
 var MAX_ADJUST_STEPS = 32;
@@ -11561,7 +11561,7 @@ function createSingleUserCloudflareWorker(buildConfig, options = {}) {
   return { fetch: fetch2, scheduled, runTask: runTask2, getSchemaVersion: getSchemaVersion2, ensureSchema: ensureSchema2 };
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-shared@0.4.0-next.11/node_modules/@rei-standard/amsg-shared/dist/index.mjs
+// ../../../../Desktop/3005大豪宅/糯米鸡/node_modules/.pnpm/@rei-standard+amsg-shared@0.4.0-next.11/node_modules/@rei-standard/amsg-shared/dist/index.mjs
 var TEXT_ENCODER2 = new TextEncoder();
 var TEXT_DECODER2 = new TextDecoder("utf-8", { fatal: false });
 function utf83(str) {
@@ -11723,6 +11723,8 @@ var readTaskKind = (metadata) => {
 var AMSG_JOB_NAMESPACE = "amsg:job";
 var AMSG_JOB_TTL_DAYS = 3;
 var AMSG_JOB_ID_KEY = "amsgJobId";
+var XHS_ROAM_CHECK_KIND = "xhs-roam-check";
+var XHS_ROAM_JOB_PREFIX = "xhs-roam:";
 
 // worker/amsg/src/skipDiagnostics.ts
 var BODY_ERROR_MAX_CHARS = 200;
@@ -11932,10 +11934,1166 @@ var plateConsolidateHandler = {
   }
 };
 
+// utils/networkFailureDiagnosis.ts
+var readError = (error) => {
+  if (error instanceof Error) return { name: error.name || "Error", message: error.message || String(error) };
+  if (error && typeof error === "object") {
+    const anyErr = error;
+    return {
+      name: typeof anyErr.name === "string" ? anyErr.name : "Error",
+      message: typeof anyErr.message === "string" ? anyErr.message : String(error)
+    };
+  }
+  return { name: "Error", message: String(error ?? "") };
+};
+var looksLikeNetworkError = (message) => /failed to fetch/i.test(message) || /load failed/i.test(message) || /networkerror/i.test(message) || /network request failed/i.test(message);
+var parseTargetUrl = (url, base) => {
+  try {
+    const parsed = new URL(url, base || (typeof location !== "undefined" ? location.href : void 0));
+    return { ok: true, origin: parsed.origin, host: parsed.host, protocol: parsed.protocol, href: parsed.href };
+  } catch {
+    return { ok: false, origin: "", host: "", protocol: "", href: url };
+  }
+};
+var isLoopbackHost = (host) => /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host);
+var classifyFetchFailure = (ctx) => {
+  const { name, message } = readError(ctx.error);
+  if (name === "TimeoutError" || /timed?\s?out|timeout/i.test(message)) return "timeout";
+  if (name === "AbortError" || /aborted|abort/i.test(message)) return "aborted";
+  const target = parseTargetUrl(ctx.url);
+  if (!target.ok) return "bad-url";
+  const pageProtocol = ctx.pageProtocol ?? (typeof location !== "undefined" ? location.protocol : "");
+  if (pageProtocol === "https:" && target.protocol === "http:" && !isLoopbackHost(target.host)) return "mixed-content";
+  const online = ctx.online ?? (typeof navigator !== "undefined" ? navigator.onLine : true);
+  if (online === false) return "offline";
+  if (looksLikeNetworkError(message) || name === "TypeError") return "blocked";
+  return "unknown";
+};
+
+// utils/xhsMcpClient.ts
+var XHS_SPIDER_V3_EXPERIMENT = Object.freeze({
+  optInValue: "spider-v3-isolated-cookie",
+  strategyKey: "os_xhs_spider_v3_strategy",
+  sessionKey: "os_xhs_spider_v3_session",
+  circuitKey: "os_xhs_spider_v3_circuit"
+});
+var detectMode = (serverUrl) => {
+  const normalized = serverUrl.trim().replace(/\/+$/, "");
+  if (/(?:^|\/)mcp$/i.test(normalized)) return "mcp";
+  if (normalized.includes("/api")) return "bridge";
+  return "mcp";
+};
+var liteCookie = "";
+var litePlatform = "auto";
+var runtimeAccessClientId = "";
+var runtimeAccessClientSecret = "";
+var resolveLiteCookie = () => {
+  if (liteCookie) return liteCookie;
+  try {
+    const raw = localStorage.getItem("os_realtime_config");
+    if (raw) return JSON.parse(raw)?.xhsMcpConfig?.cookie || "";
+  } catch {
+  }
+  return "";
+};
+var resolvePersistedLitePlatform = () => {
+  try {
+    const raw = localStorage.getItem("os_realtime_config");
+    const platform = raw ? JSON.parse(raw)?.xhsMcpConfig?.platform : void 0;
+    return platform === "xhs" || platform === "rednote" ? platform : "auto";
+  } catch {
+    return "auto";
+  }
+};
+var resolveAccessHeaders = () => {
+  try {
+    if (runtimeAccessClientId && runtimeAccessClientSecret) return {
+      "CF-Access-Client-Id": runtimeAccessClientId,
+      "CF-Access-Client-Secret": runtimeAccessClientSecret,
+      "X-MCP-Forward-Headers": "CF-Access-Client-Id, CF-Access-Client-Secret"
+    };
+    const raw = localStorage.getItem("os_realtime_config");
+    const config = raw ? JSON.parse(raw)?.xhsMcpConfig : void 0;
+    const clientId = typeof config?.accessClientId === "string" ? config.accessClientId.trim() : "";
+    const clientSecret = typeof config?.accessClientSecret === "string" ? config.accessClientSecret.trim() : "";
+    if (!clientId || !clientSecret) return {};
+    return {
+      "CF-Access-Client-Id": clientId,
+      "CF-Access-Client-Secret": clientSecret,
+      "X-MCP-Forward-Headers": "CF-Access-Client-Id, CF-Access-Client-Secret"
+    };
+  } catch {
+    return {};
+  }
+};
+var spiderStorage = () => {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+};
+var readSpiderJson = (key) => {
+  try {
+    const raw = spiderStorage()?.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+var writeSpiderJson = (key, value) => {
+  try {
+    spiderStorage()?.setItem(key, JSON.stringify(value));
+  } catch {
+  }
+};
+var removeSpiderValue = (key) => {
+  try {
+    spiderStorage()?.removeItem(key);
+  } catch {
+  }
+};
+var spiderCookieTag = async (cookie) => {
+  const a1 = cookie.match(/(?:^|;\s*)a1=([^;]+)/)?.[1] || "";
+  if (!a1) return "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(a1));
+  return Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+var withSpiderCircuitError = (detail, message) => ({
+  ...detail,
+  data: {
+    ...detail?.data || {},
+    comments_status: "unavailable",
+    comments_error: {
+      code: "SPIDER_V3_CIRCUIT_OPEN",
+      message
+    }
+  }
+});
+var trySpiderV3CommentPatch = async (baseUrl, requestBody, cookie, detail, signal) => {
+  signal?.throwIfAborted();
+  const storage = spiderStorage();
+  if (!storage || detail?.data?.comments_status === "loaded" || detail?.platform === "rednote" || detail?.data?.platform === "rednote") {
+    return detail;
+  }
+  const a1Tag = await spiderCookieTag(cookie);
+  if (!a1Tag) return detail;
+  let sessionState = readSpiderJson(XHS_SPIDER_V3_EXPERIMENT.sessionKey);
+  if (sessionState?.a1Tag !== a1Tag) {
+    sessionState = null;
+    removeSpiderValue(XHS_SPIDER_V3_EXPERIMENT.sessionKey);
+    removeSpiderValue(XHS_SPIDER_V3_EXPERIMENT.circuitKey);
+  }
+  const circuit = readSpiderJson(XHS_SPIDER_V3_EXPERIMENT.circuitKey);
+  if (circuit?.a1Tag === a1Tag) {
+    return withSpiderCircuitError(detail, "Spider v3 received HTTP 406 earlier and is circuit-broken for this cookie.");
+  }
+  const requestedStrategy = storage.getItem(XHS_SPIDER_V3_EXPERIMENT.strategyKey) || "no-client-hints";
+  const strategy = ["no-client-hints", "browser-hints", "legacy-transport"].includes(requestedStrategy) ? requestedStrategy : "no-client-hints";
+  try {
+    const response = await fetch(`${baseUrl}/api/xhs-experimental-comments`, {
+      signal,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-xhs-cookie": cookie,
+        ...litePlatform !== "auto" ? { "x-xhs-platform": litePlatform } : {},
+        "x-xhs-experiment-ack": XHS_SPIDER_V3_EXPERIMENT.optInValue
+      },
+      body: JSON.stringify({
+        acknowledge_risk: true,
+        feed_id: requestBody.feed_id,
+        xsec_token: requestBody.xsec_token || "",
+        strategy,
+        session_state: sessionState || void 0
+      })
+    });
+    const experiment = await response.json().catch(() => null);
+    if (experiment?.session_state) {
+      writeSpiderJson(XHS_SPIDER_V3_EXPERIMENT.sessionKey, experiment.session_state);
+    }
+    if (experiment?.error_code === "XHS_EXPERIMENT_HTTP_406") {
+      writeSpiderJson(XHS_SPIDER_V3_EXPERIMENT.circuitKey, {
+        a1Tag,
+        openedAt: Date.now(),
+        reason: experiment.error_code
+      });
+      return withSpiderCircuitError(detail, "Spider v3 was rejected with HTTP 406; automatic comment attempts are now stopped.");
+    }
+    if (!response.ok || !experiment?.success || !experiment?.data) return detail;
+    removeSpiderValue(XHS_SPIDER_V3_EXPERIMENT.circuitKey);
+    return {
+      ...detail,
+      data: {
+        ...detail?.data || {},
+        ...experiment.data,
+        comments_error: void 0
+      }
+    };
+  } catch {
+    signal?.throwIfAborted();
+    return detail;
+  }
+};
+var bridgePost = async (serverUrl, endpoint, body = {}, signal) => {
+  signal?.throwIfAborted();
+  const baseUrl = serverUrl.replace(/\/+$/, "").replace(/\/api$/, "");
+  const url = `${baseUrl}/api/${endpoint}`;
+  const headers = { "Content-Type": "application/json", ...resolveAccessHeaders() };
+  const ck = resolveLiteCookie();
+  if (ck) headers["x-xhs-cookie"] = ck;
+  const requestPlatform = endpoint === "check-login" ? litePlatform : litePlatform === "auto" ? resolvePersistedLitePlatform() : litePlatform;
+  if (requestPlatform !== "auto") headers["x-xhs-platform"] = requestPlatform;
+  try {
+    const resp = await fetch(url, {
+      signal,
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+    if (resp.status === 401) {
+      return { success: false, error: "\u672A\u767B\u5F55\uFF0C\u8BF7\u5148\u767B\u5F55\u5C0F\u7EA2\u4E66" };
+    }
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({}));
+      return { success: false, error: errData.error || `HTTP ${resp.status}` };
+    }
+    let data = await resp.json();
+    if (data.error) {
+      return { success: false, error: data.error };
+    }
+    const detectedPlatform = data?.platform || data?.data?.platform;
+    if (detectedPlatform === "xhs" || detectedPlatform === "rednote") {
+      litePlatform = detectedPlatform;
+    }
+    if (endpoint === "get-feed-detail" && ck) {
+      data = await trySpiderV3CommentPatch(baseUrl, body, ck, data, signal);
+    }
+    return { success: true, data };
+  } catch (e) {
+    signal?.throwIfAborted();
+    return { success: false, error: e.message };
+  }
+};
+var mcpRequestIdCounter = 0;
+var mcpSessionId = null;
+var mcpInitialized = false;
+var mcpInitPromise = null;
+var mcpDiscoveredTools = [];
+var TOOL_NAME_ALIASES = {
+  "check_login": ["check_login", "checkLogin", "check_login_status", "checkLoginStatus"],
+  "get_login_qrcode": ["get_login_qrcode", "getLoginQrCode", "get_qrcode", "getQRCode", "login_qrcode", "loginQrCode"],
+  "search": ["search", "search_notes", "searchNotes", "search_feeds", "searchFeeds"],
+  "get_recommend": ["get_recommend", "getRecommend", "list_feeds", "listFeeds", "get_feed_list", "getFeedList", "list_notes", "listNotes"],
+  "get_note_detail": ["get_note_detail", "getNoteDetail", "get_feed_detail", "getFeedDetail"],
+  "publish_note": ["publish_note", "publishNote", "publish_post", "publishPost", "publish_content", "publishContent"],
+  "comment": ["comment", "post_comment", "postComment", "post_comment_to_feed", "postCommentToFeed"],
+  "get_user_info": ["get_user_info", "getUserInfo", "get_user_profile", "getUserProfile", "user_profile", "userProfile"],
+  "like_feed": ["like_feed", "likeFeed", "like_note", "likeNote"],
+  "favorite_feed": ["favorite_feed", "favoriteFeed", "favorite_note", "favoriteNote", "collect_note", "collectNote"],
+  "reply_comment": ["reply_comment", "replyComment", "reply_comment_in_feed", "replyCommentInFeed"]
+};
+var mcpResolveToolName = (desiredName) => {
+  if (!mcpDiscoveredTools.length) return desiredName;
+  if (mcpDiscoveredTools.some((t) => t.name === desiredName)) return desiredName;
+  const aliases = TOOL_NAME_ALIASES[desiredName];
+  if (aliases) {
+    for (const alias of aliases) {
+      if (mcpDiscoveredTools.some((t) => t.name === alias)) return alias;
+    }
+  }
+  const norm = (s) => s.replace(/[_-]/g, "").toLowerCase();
+  const desired = norm(desiredName);
+  const match = mcpDiscoveredTools.find((t) => norm(t.name) === desired);
+  if (match) return match.name;
+  console.warn(`[MCP] \u672A\u627E\u5230\u5DE5\u5177 "${desiredName}" \u7684\u5339\u914D\uFF0C\u53EF\u7528: ${mcpDiscoveredTools.map((t) => t.name).join(", ")}`);
+  return desiredName;
+};
+var mcpAdaptParams = (resolvedName, args) => {
+  const norm = resolvedName.replace(/[_-]/g, "").toLowerCase();
+  if (args.url && !args.feed_id) {
+    const feedIdTools = ["getfeeddetail", "getnotedetail", "postcomment", "postcommenttofeed", "replycommentinfeed"];
+    if (feedIdTools.some((n) => norm === n)) {
+      const adapted = { ...args };
+      adapted.feed_id = extractNoteIdFromUrl(args.url);
+      if (!adapted.xsec_token) {
+        const token = extractXsecTokenFromUrl(args.url);
+        if (token) adapted.xsec_token = token;
+      }
+      delete adapted.url;
+      return adapted;
+    }
+  }
+  return args;
+};
+var mcpBuildRequest = (method, params, isNotification = false) => {
+  const req = { jsonrpc: "2.0", method, params };
+  if (!isNotification) req.id = ++mcpRequestIdCounter;
+  return req;
+};
+var mcpParseSseResponse = (text2) => {
+  const lines = text2.split("\n");
+  const dataLines = [];
+  for (const line of lines) {
+    if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+    else if (line.startsWith("data:")) dataLines.push(line.slice(5));
+  }
+  if (dataLines.length === 0) return null;
+  for (let i = dataLines.length - 1; i >= 0; i--) {
+    try {
+      return JSON.parse(dataLines[i]);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+};
+var mcpParseResponse = (text2, contentType) => {
+  if (contentType.includes("text/event-stream") || text2.trimStart().startsWith("event:") || text2.trimStart().startsWith("data:")) {
+    const parsed = mcpParseSseResponse(text2);
+    if (parsed) return parsed;
+  }
+  try {
+    return JSON.parse(text2);
+  } catch {
+    const match = text2.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+      }
+    }
+    throw new Error(`MCP: \u65E0\u6CD5\u89E3\u6790\u54CD\u5E94: ${text2.slice(0, 300)}`);
+  }
+};
+var mcpPost = async (serverUrl, body, expectResponse = true, signal) => {
+  signal?.throwIfAborted();
+  const headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+    ...resolveAccessHeaders()
+  };
+  if (mcpSessionId) headers["Mcp-Session-Id"] = mcpSessionId;
+  const resp = await fetch(serverUrl, { signal, method: "POST", headers, body: JSON.stringify(body) });
+  const sessionId = resp.headers.get("Mcp-Session-Id") || resp.headers.get("mcp-session-id");
+  if (resp.status === 202) return { response: null, sessionId };
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    throw new Error(`MCP HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+  }
+  if (!expectResponse) return { response: null, sessionId };
+  const contentType = resp.headers.get("content-type") || "";
+  const text2 = await resp.text();
+  return { response: mcpParseResponse(text2, contentType), sessionId };
+};
+var mcpInitialize = async (serverUrl, signal) => {
+  signal?.throwIfAborted();
+  const initReq = mcpBuildRequest("initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "AetherOS-XhsFreeRoam", version: "1.0.0" }
+  });
+  const { response, sessionId } = await mcpPost(serverUrl, initReq, void 0, signal);
+  if (sessionId) mcpSessionId = sessionId;
+  if (response?.error) throw new Error(`MCP Initialize failed: ${response.error.message}`);
+  if (!mcpSessionId) {
+    console.warn("[MCP] \u670D\u52A1\u672A\u8FD4\u56DE Mcp-Session-Id\uFF0C\u6309\u65E0\u72B6\u6001 MCP \u7EE7\u7EED\u8FDE\u63A5");
+  }
+  const notifReq = mcpBuildRequest("notifications/initialized", {}, true);
+  await mcpPost(serverUrl, notifReq, false, signal);
+  try {
+    const toolsReq = mcpBuildRequest("tools/list");
+    const { response: toolsResp } = await mcpPost(serverUrl, toolsReq, void 0, signal);
+    if (toolsResp?.result?.tools) {
+      mcpDiscoveredTools = toolsResp.result.tools.map((t) => ({ name: t.name, description: t.description }));
+      console.log("[MCP] \u53D1\u73B0\u5DE5\u5177:", mcpDiscoveredTools.map((t) => t.name).join(", "));
+    }
+  } catch (e) {
+    signal?.throwIfAborted();
+    console.warn("[MCP] tools/list \u8C03\u7528\u5931\u8D25\uFF0C\u5C06\u4F7F\u7528\u9ED8\u8BA4\u5DE5\u5177\u540D", e);
+  }
+  mcpInitialized = true;
+};
+var mcpEnsureInitialized = async (serverUrl, signal) => {
+  signal?.throwIfAborted();
+  if (mcpInitialized) return;
+  if (!mcpInitPromise) {
+    mcpInitPromise = mcpInitialize(serverUrl, signal).finally(() => {
+      mcpInitPromise = null;
+    });
+  }
+  await mcpInitPromise;
+};
+var mcpCallTool = async (serverUrl, toolName, args = {}, signal) => {
+  signal?.throwIfAborted();
+  try {
+    await mcpEnsureInitialized(serverUrl, signal);
+    const resolved = mcpResolveToolName(toolName);
+    const adapted = mcpAdaptParams(resolved, args);
+    if (resolved !== toolName) console.log(`[MCP] \u5DE5\u5177\u540D\u6620\u5C04: ${toolName} \u2192 ${resolved}`);
+    const body = mcpBuildRequest("tools/call", { name: resolved, arguments: adapted });
+    const headers = {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+      ...resolveAccessHeaders()
+    };
+    if (mcpSessionId) headers["Mcp-Session-Id"] = mcpSessionId;
+    const resp = await fetch(serverUrl, { signal, method: "POST", headers, body: JSON.stringify(body) });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      return { success: false, error: `MCP HTTP ${resp.status}: ${errText.slice(0, 200)}` };
+    }
+    const contentType = resp.headers.get("content-type") || "";
+    const text2 = await resp.text();
+    const parsed = mcpParseResponse(text2, contentType);
+    if (parsed.error) return { success: false, error: `MCP Error [${parsed.error.code}]: ${parsed.error.message}` };
+    const result = parsed.result;
+    if (result?.content) {
+      const textParts = result.content.filter((c) => c.type === "text").map((c) => c.text);
+      const fullText = textParts.join("\n");
+      if (result.isError) return { success: false, error: fullText || "MCP \u5DE5\u5177\u6267\u884C\u5931\u8D25" };
+      try {
+        const parsed2 = JSON.parse(fullText);
+        console.log(`[MCP] \u5DE5\u5177 ${toolName} \u8FD4\u56DE JSON, \u9876\u5C42 keys: ${typeof parsed2 === "object" && parsed2 ? Object.keys(parsed2).join(",") : typeof parsed2}`);
+        return { success: true, data: parsed2 };
+      } catch {
+        signal?.throwIfAborted();
+        console.log(`[MCP] \u5DE5\u5177 ${toolName} \u8FD4\u56DE\u7EAF\u6587\u672C (${fullText.length} chars)`);
+        return { success: true, data: fullText };
+      }
+    }
+    return { success: true, data: result };
+  } catch (e) {
+    signal?.throwIfAborted();
+    return { success: false, error: e.message };
+  }
+};
+var extractNoteIdFromUrl = (url) => {
+  const match = url.match(/\/explore\/([a-f0-9]+)/i) || url.match(/\/discovery\/item\/([a-f0-9]+)/i) || url.match(/\/([a-f0-9]{24})/);
+  return match ? match[1] : url;
+};
+var extractXsecTokenFromUrl = (url) => {
+  try {
+    const u = new URL(url);
+    return u.searchParams.get("xsec_token") || void 0;
+  } catch {
+    return void 0;
+  }
+};
+var extractFirstXsecToken = (data) => {
+  if (!data) return void 0;
+  const scanArray = (arr) => {
+    for (const item of arr) {
+      const token = item?.xsec_token || item?.xsecToken || item?.noteCard?.xsec_token || item?.noteCard?.xsecToken;
+      if (token) return token;
+    }
+    return void 0;
+  };
+  if (Array.isArray(data)) return scanArray(data);
+  for (const key of ["items", "notes", "feeds", "data", "list", "results", "note_list", "noteList"]) {
+    if (Array.isArray(data[key])) {
+      const token = scanArray(data[key]);
+      if (token) return token;
+    }
+  }
+  if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
+    for (const key of ["items", "notes", "feeds", "list", "results", "note_list", "noteList"]) {
+      if (Array.isArray(data.data[key])) {
+        const token = scanArray(data.data[key]);
+        if (token) return token;
+      }
+    }
+    if (Array.isArray(data.data)) return scanArray(data.data);
+  }
+  if (typeof data === "string") {
+    const match = data.match(/xsec_token[=:]["']?\s*([A-Za-z0-9+/=]+)/);
+    if (match) return match[1];
+  }
+  return void 0;
+};
+var describeXhsConnectFailure = (e, serverUrl) => {
+  const host = parseTargetUrl(serverUrl).host || serverUrl;
+  const kind = classifyFetchFailure({ url: serverUrl, error: e });
+  switch (kind) {
+    case "timeout":
+      return `\u8FDE\u63A5 ${host} \u8D85\u65F6\uFF0810 \u79D2\u4E00\u4E2A\u5B57\u8282\u90FD\u6CA1\u56DE\uFF09\u3002\u8FDE\u63A5\u662F\u6302\u4F4F\u4E0D\u8FD4\u56DE\u3001\u4E0D\u662F\u88AB\u62D2\u2014\u2014\u591A\u534A\u662F\u8BE5\u57DF\u540D\u6CA1\u8D70\u4EE3\u7406\u8D70\u4E86\u76F4\u8FDE\uFF0C\u6216\u4EE3\u7406\u8282\u70B9\u5230\u4E0A\u6E38\u662F\u9ED1\u6D1E\u3002\u4F18\u5148\u6362\u4E2A\u68AF\u5B50\u8282\u70B9\u3001\u6216\u628A\u8FD9\u4E2A\u57DF\u540D\u663E\u5F0F\u52A0\u8FDB\u4EE3\u7406\u89C4\u5219\u3002`;
+    case "aborted":
+      return "\u8FDE\u63A5\u88AB\u53D6\u6D88\uFF08\u9875\u9762\u5207\u8D70\u4E86\u6216\u624B\u52A8\u505C\u6B62\uFF09\u3002";
+    case "offline":
+      return "\u5F53\u524D\u5904\u4E8E\u79BB\u7EBF\u72B6\u6001\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u6216\u68AF\u5B50\u662F\u5426\u6389\u7EBF\u3002";
+    case "mixed-content":
+      return `SullyOS \u8DD1\u5728 https \u4E0A\uFF0C\u4E0D\u80FD\u8FDE http \u5730\u5740\uFF08${host}\uFF09\u3002\u8BF7\u628A\u670D\u52A1\u5730\u5740\u6539\u6210 https://\uFF0C\u6216\u7528\u672C\u5730 http \u6253\u5F00 SullyOS\u3002`;
+    case "bad-url":
+      return `\u670D\u52A1\u5668\u5730\u5740\u4E0D\u662F\u5408\u6CD5 URL\uFF1A${serverUrl}\u3002\u68C0\u67E5\u6709\u6CA1\u6709\u6F0F\u6389 https://\u3001\u591A\u4E86\u7A7A\u683C\u6216\u7528\u4E86\u4E2D\u6587\u6807\u70B9\u3002`;
+    case "blocked":
+      return `\u8FDE\u4E0D\u4E0A ${host}\uFF1A\u6D4F\u89C8\u5668\u5728\u62FF\u5230\u54CD\u5E94\u524D\u5C31\u5931\u8D25\u4E86\u3002\u5E38\u89C1\u539F\u56E0\u2014\u2014\u68AF\u5B50/\u4EE3\u7406\u62E6\u4E86\u8FD9\u4E2A\u57DF\u540D\u3001DNS \u89E3\u6790\u4E0D\u5230\u3001\u6D4F\u89C8\u5668\u6269\u5C55\uFF08\u5E7F\u544A\u62E6\u622A/\u9690\u79C1\u76FE\uFF09\u5C4F\u853D\u4E86\uFF0C\u6216\u5BF9\u65B9\u6B63\u8FD4\u56DE\u9650\u6D41/\u4EBA\u673A\u9A8C\u8BC1\u9875\u3002\u53EF\u5728\u65B0\u6807\u7B7E\u9875\u76F4\u63A5\u6253\u5F00 ${serverUrl.replace(/\/+$/, "")}/health \u9A8C\u8BC1\uFF1B\u8BE6\u7EC6\u65C1\u8BC1\u89C1\u300C\u7CFB\u7EDF\u8C03\u8BD5\u7EC8\u7AEF\u300D\u3002`;
+    default:
+      return e?.message || "\u8FDE\u63A5\u5931\u8D25";
+  }
+};
+var XhsMcpClient = {
+  resetSession: () => {
+    mcpSessionId = null;
+    mcpInitialized = false;
+    mcpRequestIdCounter = 0;
+    mcpDiscoveredTools = [];
+  },
+  // Lite Worker auth: register the XHS cookie used for x-xhs-cookie header.
+  setCookie: (cookie) => {
+    const nextCookie = cookie || "";
+    if (nextCookie !== liteCookie) litePlatform = "auto";
+    liteCookie = nextCookie;
+  },
+  /** Inject credentials from encrypted AMSG tool_config before server-side MCP calls. */
+  setAccessCredentials: (clientId, clientSecret) => {
+    runtimeAccessClientId = clientId?.trim() || "";
+    runtimeAccessClientSecret = clientSecret?.trim() || "";
+  },
+  testConnection: async (serverUrl, cookie, signal) => {
+    signal?.throwIfAborted();
+    if (cookie !== void 0) XhsMcpClient.setCookie(cookie);
+    const mode = detectMode(serverUrl);
+    if (mode === "bridge") {
+      try {
+        const baseUrl = serverUrl.replace(/\/+$/, "").replace(/\/api$/, "");
+        const healthResp = await fetch(`${baseUrl}/api/health`, {
+          signal: signal ?? (typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(1e4) : void 0)
+        });
+        if (!healthResp.ok) return { connected: false, error: `Bridge \u670D\u52A1\u672A\u54CD\u5E94 (HTTP ${healthResp.status})` };
+        const loginResult = await bridgePost(serverUrl, "check-login", void 0, signal);
+        const tools = ["check-login", "search", "list-feeds", "get-feed-detail", "publish", "publish-video", "long-article", "post-comment", "reply-comment", "like-feed", "favorite-feed", "user-profile", "login", "get-qrcode"];
+        let loggedIn = false, nickname, userId, platform;
+        if (loginResult.success && loginResult.data) {
+          const d = loginResult.data;
+          if (typeof d === "string") {
+            loggedIn = d.includes("\u5DF2\u767B\u5F55") || d.includes("logged");
+            const nameMatch = d.match(/用户名[:：]\s*(.+)/);
+            if (nameMatch) nickname = nameMatch[1].trim();
+            const idMatch = d.match(/(?:用户ID|user_id|userId|red_id|ID)[:：]\s*(\S+)/i);
+            if (idMatch) userId = idMatch[1].trim();
+          } else {
+            loggedIn = !!(d.logged_in || d.loggedIn || d.is_logged_in || d.isLoggedIn || d.logged);
+            nickname = d.nickname || d.name || d.username || d.user_name || void 0;
+            userId = d.user_id || d.userId || d.id || d.red_id || void 0;
+            platform = d.platform === "xhs" || d.platform === "rednote" ? d.platform : void 0;
+          }
+        }
+        let xsecToken;
+        if (loggedIn) {
+          try {
+            const feedResult = await bridgePost(serverUrl, "list-feeds", void 0, signal);
+            if (feedResult.success) xsecToken = extractFirstXsecToken(feedResult.data);
+          } catch {
+            signal?.throwIfAborted();
+          }
+        }
+        return { connected: true, tools, nickname, userId, loggedIn, xsecToken, platform };
+      } catch (e) {
+        signal?.throwIfAborted();
+        return { connected: false, error: describeXhsConnectFailure(e, serverUrl) };
+      }
+    }
+    try {
+      XhsMcpClient.resetSession();
+      await mcpInitialize(serverUrl, signal);
+      const tools = mcpDiscoveredTools.map((t) => t.name);
+      let nickname, userId, loggedIn = false;
+      try {
+        const loginResult = await mcpCallTool(serverUrl, "check_login", void 0, signal);
+        if (loginResult.success && loginResult.data) {
+          const d = loginResult.data;
+          if (typeof d === "string") {
+            loggedIn = d.includes("\u5DF2\u767B\u5F55");
+            const nameMatch = d.match(/用户名[:：]\s*(.+)/);
+            if (nameMatch) nickname = nameMatch[1].trim();
+            const idMatch = d.match(/(?:用户ID|user_id|userId|red_id|ID)[:：]\s*(\S+)/i);
+            if (idMatch) userId = idMatch[1].trim();
+          } else {
+            loggedIn = !!(d.logged_in || d.loggedIn || d.is_logged_in || d.isLoggedIn);
+            nickname = d.nickname || d.name || d.username || void 0;
+            userId = d.user_id || d.userId || d.id || d.red_id || void 0;
+          }
+        }
+      } catch (e) {
+        signal?.throwIfAborted();
+        console.warn("[MCP] \u83B7\u53D6\u767B\u5F55\u72B6\u6001\u5931\u8D25\uFF0C\u8DF3\u8FC7:", e);
+      }
+      let xsecToken;
+      if (loggedIn) {
+        try {
+          console.log("[MCP] \u81EA\u52A8\u83B7\u53D6 xsecToken: \u8C03\u7528 get_recommend...");
+          const feedResult = await mcpCallTool(serverUrl, "get_recommend", void 0, signal);
+          if (feedResult.success) {
+            xsecToken = extractFirstXsecToken(feedResult.data);
+            console.log(`[MCP] \u81EA\u52A8\u83B7\u53D6 xsecToken: ${xsecToken ? "\u6210\u529F" : "\u672A\u627E\u5230"}`);
+          }
+        } catch (e) {
+          signal?.throwIfAborted();
+          console.warn("[MCP] \u81EA\u52A8\u83B7\u53D6 xsecToken \u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u8FDE\u63A5\uFF09:", e);
+        }
+      }
+      return { connected: true, tools, nickname, userId, loggedIn, xsecToken };
+    } catch (e) {
+      signal?.throwIfAborted();
+      return { connected: false, error: e.message };
+    }
+  },
+  ensureInitialized: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "mcp" && !mcpInitialized) {
+      XhsMcpClient.resetSession();
+      await mcpInitialize(serverUrl, signal);
+    }
+  },
+  checkLogin: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "check-login", void 0, signal) : mcpCallTool(serverUrl, "check_login", void 0, signal);
+  },
+  /** 本地 MCP 扫码登录；Lite/云端模式没有二维码入口。 */
+  getLoginQrCode: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "get-qrcode", void 0, signal) : mcpCallTool(serverUrl, "get_login_qrcode", void 0, signal);
+  },
+  search: async (serverUrl, keyword, options, signal) => {
+    signal?.throwIfAborted();
+    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "search", { keyword, ...options }, signal) : mcpCallTool(serverUrl, "search", { keyword }, signal);
+  },
+  getRecommend: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "list-feeds", void 0, signal) : mcpCallTool(serverUrl, "get_recommend", void 0, signal);
+  },
+  getNoteDetail: async (serverUrl, noteUrl, xsecToken, options, signal) => {
+    signal?.throwIfAborted();
+    const feedId = extractNoteIdFromUrl(noteUrl);
+    const token = xsecToken || extractXsecTokenFromUrl(noteUrl) || "";
+    const loadAllComments = !!options?.loadAllComments;
+    let xsecSource = options?.xsecSource || "pc_feed";
+    try {
+      xsecSource = new URL(noteUrl).searchParams.get("xsec_source") || xsecSource;
+    } catch {
+      signal?.throwIfAborted();
+    }
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "get-feed-detail", {
+        feed_id: feedId,
+        xsec_token: token,
+        xsec_source: xsecSource,
+        load_all_comments: loadAllComments,
+        click_more_replies: loadAllComments
+      }, signal);
+    }
+    const args = { url: noteUrl };
+    if (xsecToken) args.xsec_token = xsecToken;
+    if (loadAllComments) {
+      args.load_all_comments = true;
+      args.click_more_replies = true;
+    }
+    return mcpCallTool(serverUrl, "get_note_detail", args, signal);
+  },
+  publishNote: async (serverUrl, params, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "publish", {
+        title: params.title,
+        content: params.content,
+        images: params.images || [],
+        tags: params.tags || [],
+        visibility: params.is_private ? "private" : void 0
+      }, signal);
+    }
+    return mcpCallTool(serverUrl, "publish_note", { ...params, images: params.images || [] }, signal);
+  },
+  publishVideo: async (serverUrl, params, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "publish-video", {
+        title: params.title,
+        content: params.content,
+        video: params.video,
+        tags: params.tags || []
+      }, signal);
+    }
+    return { success: false, error: "\u89C6\u9891\u53D1\u5E03\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
+  },
+  publishLongArticle: async (serverUrl, params, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "long-article", {
+        title: params.title,
+        content: params.content,
+        images: params.images || []
+      }, signal);
+    }
+    return { success: false, error: "\u957F\u6587\u53D1\u5E03\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
+  },
+  comment: async (serverUrl, noteUrl, content, xsecToken, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      const feedId = extractNoteIdFromUrl(noteUrl);
+      const token = xsecToken || extractXsecTokenFromUrl(noteUrl) || "";
+      return bridgePost(serverUrl, "post-comment", { feed_id: feedId, xsec_token: token, content }, signal);
+    }
+    const args = { url: noteUrl, content };
+    if (xsecToken) args.xsec_token = xsecToken;
+    return mcpCallTool(serverUrl, "comment", args, signal);
+  },
+  likeFeed: async (serverUrl, feedId, xsecToken, unlike = false, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "like-feed", { feed_id: feedId, xsec_token: xsecToken, unlike }, signal);
+    }
+    return mcpCallTool(serverUrl, "like_feed", { feed_id: feedId, xsec_token: xsecToken, ...unlike ? { unlike: true } : {} }, signal);
+  },
+  favoriteFeed: async (serverUrl, feedId, xsecToken, unfavorite = false, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "favorite-feed", { feed_id: feedId, xsec_token: xsecToken, unfavorite }, signal);
+    }
+    return mcpCallTool(serverUrl, "favorite_feed", { feed_id: feedId, xsec_token: xsecToken, ...unfavorite ? { unfavorite: true } : {} }, signal);
+  },
+  replyComment: async (serverUrl, feedId, xsecToken, content, commentId, userId, parentCommentId, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "reply-comment", {
+        feed_id: feedId,
+        xsec_token: xsecToken,
+        content,
+        comment_id: commentId,
+        user_id: userId
+      }, signal);
+    }
+    const args = { feed_id: feedId, xsec_token: xsecToken, content };
+    if (commentId) args.comment_id = commentId;
+    if (userId) args.user_id = userId;
+    if (parentCommentId) args.parent_comment_id = parentCommentId;
+    return mcpCallTool(serverUrl, "reply_comment", args, signal);
+  },
+  getUserProfile: async (serverUrl, userId, xsecToken, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") {
+      return bridgePost(serverUrl, "user-profile", { user_id: userId, xsec_token: xsecToken || "" }, signal);
+    }
+    const args = { user_id: userId };
+    if (xsecToken) args.xsec_token = xsecToken;
+    return mcpCallTool(serverUrl, "get_user_info", args, signal);
+  },
+  login: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") return bridgePost(serverUrl, "login", void 0, signal);
+    return { success: false, error: "\u767B\u5F55\u529F\u80FD\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
+  },
+  getQrcode: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") return bridgePost(serverUrl, "get-qrcode", void 0, signal);
+    return { success: false, error: "\u4E8C\u7EF4\u7801\u529F\u80FD\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
+  },
+  logout: async (serverUrl, signal) => {
+    signal?.throwIfAborted();
+    if (detectMode(serverUrl) === "bridge") return bridgePost(serverUrl, "delete-cookies", void 0, signal);
+    return { success: false, error: "\u767B\u51FA\u529F\u80FD\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
+  }
+};
+var extractNotesFromMcpData = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    if (data.length > 0 && Array.isArray(data[0])) {
+      console.log(`[XHS] extractNotes: \u68C0\u6D4B\u5230\u5D4C\u5957\u6570\u7EC4\uFF0C\u5C55\u5E73 (${data.length} \u7EC4)`);
+      return data.flat().filter((n) => n && typeof n === "object" && !Array.isArray(n));
+    }
+    return data;
+  }
+  for (const key of ["notes", "items", "feeds", "data", "list", "results", "note_list", "noteList"]) {
+    if (Array.isArray(data[key])) {
+      const arr = data[key];
+      if (arr.length > 0 && Array.isArray(arr[0])) {
+        console.log(`[XHS] extractNotes: data.${key} \u662F\u5D4C\u5957\u6570\u7EC4\uFF0C\u5C55\u5E73`);
+        return arr.flat().filter((n) => n && typeof n === "object" && !Array.isArray(n));
+      }
+      return arr;
+    }
+  }
+  if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
+    for (const key of ["notes", "items", "feeds", "list", "results", "note_list", "noteList"]) {
+      if (Array.isArray(data.data[key])) {
+        console.log(`[XHS] extractNotes: \u4ECE data.data.${key} \u627E\u5230\u6570\u7EC4, length=${data.data[key].length}`);
+        return data.data[key];
+      }
+    }
+  }
+  if (typeof data === "object") {
+    const skipKeys = /* @__PURE__ */ new Set(["interactions", "tags", "images", "comments", "replies"]);
+    for (const [key, val] of Object.entries(data)) {
+      if (skipKeys.has(key)) continue;
+      if (Array.isArray(val) && val.length > 0) {
+        const first = val[0];
+        if (first && typeof first === "object" && (first.noteId || first.note_id || first.id || first.noteCard || first.displayTitle || first.title || first.desc || first.cover)) {
+          console.log(`[XHS] extractNotes: \u5728 key "${key}" \u4E2D\u627E\u5230\u7B14\u8BB0\u6570\u7EC4, length=${val.length}`);
+          return val;
+        }
+      }
+    }
+  }
+  if (typeof data === "string") {
+    console.warn("[XHS] extractNotes: data \u662F\u7EAF\u6587\u672C\uFF0C\u65E0\u6CD5\u63D0\u53D6\u7B14\u8BB0:", data.slice(0, 200));
+    return [];
+  }
+  console.warn("[XHS] extractNotes: \u672A\u627E\u5230\u7B14\u8BB0\u6570\u7EC4, data keys:", Object.keys(data));
+  return [];
+};
+var parseXhsCount = (value) => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  }
+  if (typeof value !== "string") return 0;
+  const normalized = value.trim().replace(/[,\s+]/g, "");
+  if (!normalized) return 0;
+  const match = normalized.match(/^(-?\d+(?:\.\d+)?)(万|億|亿|千|[kKmMwW])?/);
+  if (!match) return 0;
+  const base = Number(match[1]);
+  if (!Number.isFinite(base) || base < 0) return 0;
+  const unit = match[2]?.toLowerCase();
+  const multiplier = unit === "\u4E07" || unit === "w" ? 1e4 : unit === "\u5104" || unit === "\u4EBF" ? 1e8 : unit === "\u5343" || unit === "k" ? 1e3 : unit === "m" ? 1e6 : 1;
+  return Math.round(base * multiplier);
+};
+var firstArray = (...values) => {
+  for (const value of values) {
+    if (Array.isArray(value)) return value;
+  }
+  return void 0;
+};
+var normalizeXhsComments = (payload) => {
+  const root = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+  const note = root.note || payload?.note || {};
+  const rawComments = firstArray(
+    root.comments?.list,
+    root.comments?.comment_list,
+    root.comment_list,
+    Array.isArray(root.comments) ? root.comments : void 0,
+    payload?.comments?.list,
+    payload?.comments?.comment_list,
+    payload?.comment_list,
+    Array.isArray(payload?.comments) ? payload.comments : void 0,
+    note.comments?.list,
+    note.comments?.comment_list,
+    note.comment_list,
+    Array.isArray(note.comments) ? note.comments : void 0
+  ) || [];
+  const normalizeComment = (comment, parentCommentId) => {
+    const user = comment?.userInfo || comment?.user_info || comment?.user || {};
+    const commentId = String(comment?.id || comment?.commentId || comment?.comment_id || "");
+    const replies = firstArray(
+      comment?.subComments,
+      comment?.sub_comments,
+      comment?.sub_comment_list,
+      comment?.replies
+    ) || [];
+    return {
+      commentId,
+      userId: String(user.userId || user.user_id || comment?.userId || comment?.user_id || ""),
+      author: String(
+        user.nickname || user.name || comment?.nickname || comment?.userName || comment?.user_name || comment?.author_name || comment?.author || "\u533F\u540D"
+      ),
+      content: String(comment?.content || "").trim(),
+      likes: parseXhsCount(comment?.likeCount ?? comment?.like_count ?? comment?.likes ?? 0),
+      parentCommentId,
+      subComments: replies.map((reply) => normalizeComment(reply, commentId || parentCommentId))
+    };
+  };
+  return rawComments.map((comment) => normalizeComment(comment));
+};
+var normalizeNote = (n) => {
+  const card = n.noteCard || n.note_card || n.notecard;
+  const safeImageUrl = (value) => {
+    try {
+      const parsed = new URL(String(value || "").replace(/^http:\/\//i, "https://"));
+      const host = parsed.hostname.toLowerCase();
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port || parsed.href.length > 2048 || !["xhscdn.com", "xiaohongshu.com"].some((domain) => host === domain || host.endsWith(`.${domain}`))) return "";
+      return parsed.href;
+    } catch {
+      return "";
+    }
+  };
+  const rawImages = [n.image_list, card?.image_list, n.images, card?.images].find((items) => Array.isArray(items)) || [];
+  const imageUrls = rawImages.map((image) => typeof image === "string" ? image : image?.urlDefault || image?.url_default || image?.url || image?.urlPre || image?.url_pre || image?.info_list?.find((entry) => entry?.url)?.url || "").map(safeImageUrl).filter((url) => !!url).filter((url, index, all) => all.indexOf(url) === index).slice(0, 20);
+  const coverObj = card?.cover || n.cover;
+  const rawCoverUrl = typeof coverObj === "string" ? coverObj : coverObj?.urlDefault || coverObj?.url_default || coverObj?.url || coverObj?.urlPre || coverObj?.info_list?.find((entry) => entry?.url)?.url || imageUrls[0] || void 0;
+  const coverUrl = safeImageUrl(rawCoverUrl);
+  if (coverUrl && !imageUrls.includes(coverUrl)) imageUrls.unshift(coverUrl);
+  const interact = n.interact_info || n.interactInfo || card?.interact_info || card?.interactInfo || {};
+  const likesRaw = n.likes ?? n.liked_count ?? interact.liked_count ?? interact.likedCount ?? 0;
+  const collectsRaw = n.collects ?? n.collected_count ?? interact.collected_count ?? interact.collectedCount ?? 0;
+  const commentCountRaw = n.commentCount ?? n.comment_count ?? interact.comment_count ?? interact.commentCount ?? 0;
+  const shareCountRaw = n.shareCount ?? n.share_count ?? interact.share_count ?? interact.shareCount ?? 0;
+  return {
+    noteId: n.noteId || n.note_id || n.id || card?.note_id || card?.noteId || card?.noteId || "",
+    title: n.title || n.display_title || n.displayTitle || card?.display_title || card?.displayTitle || "",
+    desc: (n.desc || n.description || n.content || card?.desc || card?.description || card?.title || "").slice(0, 500),
+    author: n.author || n.nickname || n.user?.nickname || n.user?.name || card?.user?.nickname || card?.user?.name || "",
+    authorId: n.authorId || n.author_id || n.user?.user_id || n.user?.userId || card?.user?.user_id || card?.user?.userId || "",
+    likes: parseXhsCount(likesRaw),
+    collects: parseXhsCount(collectsRaw),
+    commentCount: parseXhsCount(commentCountRaw),
+    shareCount: parseXhsCount(shareCountRaw),
+    xsecToken: n.xsecToken || n.xsec_token || card?.xsec_token || card?.xsecToken || void 0,
+    coverUrl,
+    imageUrls,
+    type: n.type || card?.type || void 0
+  };
+};
+var normalizeXhsLiteDetail = (payload, commentLimit = 15) => {
+  const root = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
+  const note = normalizeNote(root.note || payload?.note || payload || {});
+  const comments = [];
+  const appendComments = (items) => {
+    for (const item of items) {
+      if (comments.length >= commentLimit) return;
+      if (item.content) {
+        comments.push({
+          author: item.author,
+          content: item.content,
+          likes: item.likes,
+          commentId: item.commentId || void 0,
+          userId: item.userId || void 0
+        });
+      }
+      appendComments(item.subComments);
+    }
+  };
+  appendComments(normalizeXhsComments(payload));
+  const rawCommentArray = firstArray(
+    root.comments?.list,
+    root.comments?.comment_list,
+    root.comment_list,
+    Array.isArray(root.comments) ? root.comments : void 0
+  );
+  const explicitStatus = root.comments_status || root.comment_read_status || payload?.comments_status;
+  const commentError = root.comments_error || payload?.comments_error;
+  const commentReadStatus = comments.length > 0 || explicitStatus === "loaded" ? "loaded" : explicitStatus === "unavailable" || commentError ? "unavailable" : rawCommentArray ? "empty" : "not_requested";
+  return comments.length ? { ...note, comments, commentReadStatus } : { ...note, commentReadStatus };
+};
+
+// utils/amsgXhsRoam.ts
+var XHS_ROAM_RESULT_KIND = "xhs-roam-card";
+var XHS_ROAM_ACTIVITY_RESULT_KIND = "xhs-roam-activity";
+var xhsRoamJobKey = (charId) => `${XHS_ROAM_JOB_PREFIX}${charId}`;
+var parseXhsRoamJobInput = (value) => {
+  let raw = value;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw;
+  return o.v === 1 && typeof o.charId === "string" && !!o.charId && typeof o.charName === "string" && typeof o.jobId === "string" && !!o.jobId ? {
+    v: 1,
+    charId: o.charId,
+    charName: o.charName,
+    jobId: o.jobId,
+    ...typeof o.persona === "string" ? { persona: o.persona.slice(0, 4e3) } : {},
+    ...typeof o.dayKey === "string" ? { dayKey: o.dayKey } : {},
+    ...typeof o.dailyCount === "number" && Number.isFinite(o.dailyCount) ? { dailyCount: Math.max(0, Math.floor(o.dailyCount)) } : {},
+    ...typeof o.lastTaskUuid === "string" ? { lastTaskUuid: o.lastTaskUuid } : {},
+    ...typeof o.lastEventId === "string" ? { lastEventId: o.lastEventId } : {},
+    ...typeof o.lastEventTimestamp === "number" && Number.isFinite(o.lastEventTimestamp) ? { lastEventTimestamp: o.lastEventTimestamp } : {}
+  } : null;
+};
+var buildXhsRoamActivityResult = (args) => ({
+  resultKind: XHS_ROAM_ACTIVITY_RESULT_KIND,
+  v: 1,
+  ...args
+});
+var buildXhsRoamCardResult = (args) => ({
+  resultKind: XHS_ROAM_RESULT_KIND,
+  v: 1,
+  ...args
+});
+
+// worker/amsg/src/xhsRoamFire.ts
+var chooseNextDelayMs = () => {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return (8 + bytes[0] % (16 * 60) / 60) * 60 * 60 * 1e3;
+};
+var shanghaiDayKey = (date) => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+}).format(date);
+var nextDayAfterCap = (date) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value || "00";
+  const midnight = (/* @__PURE__ */ new Date(`${value("year")}-${value("month")}-${value("day")}T00:00:00+08:00`)).getTime();
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return new Date(Math.max(midnight + 24 * 60 * 60 * 1e3 + bytes[0] % (12 * 60) * 6e4, date.getTime() + 8 * 60 * 60 * 1e3));
+};
+var parseDecision = (value) => {
+  const match = value.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!["silent", "browse", "search"].includes(parsed?.action)) return null;
+    return {
+      action: parsed.action,
+      ...typeof parsed.keyword === "string" ? { keyword: parsed.keyword.slice(0, 48) } : {},
+      thinking: typeof parsed.thinking === "string" ? parsed.thinking.slice(0, 240) : ""
+    };
+  } catch {
+    return null;
+  }
+};
+var xhsRoamCheckHandler = {
+  async beforeFire({ ctx, charId, taskMeta }) {
+    const jobId = taskMeta[AMSG_JOB_ID_KEY];
+    if (typeof jobId !== "string" || !jobId) throw new Error(`XHS roam metadata missing ${AMSG_JOB_ID_KEY}`);
+    const jobRows = await ctx.readState(AMSG_JOB_NAMESPACE);
+    const row = jobRows.find((item) => item.key === xhsRoamJobKey(charId));
+    if (!row?.value) return { skip: true, reason: "xhs-roam-job-input-missing" };
+    let raw;
+    try {
+      raw = await unpackStateValue(row.value);
+    } catch {
+      throw new Error("XHS roam job state could not be unpacked");
+    }
+    const job = parseXhsRoamJobInput(raw);
+    if (!job || job.charId !== charId || job.jobId !== jobId) throw new Error("XHS roam job state does not match task");
+    const globalRows = await ctx.readState(AMSG_GLOBAL_NAMESPACE);
+    const configRow = globalRows.find((item) => item.key === "tool_config");
+    const configJson = configRow?.value ? await unpackStateValue(configRow.value) : "";
+    const config = configJson ? parseToolConfig(configJson) : null;
+    const xhs = config?.xhsMcpConfig;
+    if (!xhs?.autonomousRoamEnabled || !xhs.enabled || !xhs.serverUrl) {
+      return { skip: true, reason: "xhs-roam-disabled-or-unconfigured" };
+    }
+    const today = shanghaiDayKey(ctx.now);
+    const taskUuid = ctx.task.uuid || String(ctx.task.id || "");
+    const alreadyClaimed = !!taskUuid && job.lastTaskUuid === taskUuid && !!job.lastEventId;
+    const previousChecks = job.dayKey === today ? job.dailyCount || 0 : 0;
+    if (!alreadyClaimed) {
+      job.dailyCount = Math.min(3, previousChecks + 1);
+      job.dayKey = today;
+      job.lastTaskUuid = taskUuid || void 0;
+      job.lastEventId = `${job.charId}:${today}:${job.dailyCount}`;
+      job.lastEventTimestamp = ctx.now.getTime();
+    }
+    const dailyBudgetFull = job.dailyCount >= 3;
+    const blockedByDailyCap = !alreadyClaimed && previousChecks >= 3;
+    const eventId = job.lastEventId || `${job.charId}:${today}:${job.dailyCount}`;
+    const timestamp2 = job.lastEventTimestamp || ctx.now.getTime();
+    await ctx.writeState?.(AMSG_JOB_NAMESPACE, [{ key: xhsRoamJobKey(charId), value: await packStateValue(JSON.stringify(job)), updatedAt: ctx.now.getTime() }]);
+    if (!alreadyClaimed && typeof ctx.scheduleTask === "function") {
+      const next = dailyBudgetFull ? nextDayAfterCap(ctx.now) : new Date(ctx.now.getTime() + chooseNextDelayMs());
+      try {
+        await ctx.scheduleTask({
+          firstSendTime: next.toISOString(),
+          recurrenceType: "none",
+          messageType: "auto",
+          messageSubtype: "job",
+          uuid: crypto.randomUUID(),
+          metadata: { charId, charName: job.charName, source: "active_msg_2", amsgKind: XHS_ROAM_CHECK_KIND, [AMSG_JOB_ID_KEY]: job.jobId },
+          tzId: "Asia/Shanghai"
+        });
+      } catch (error) {
+        console.warn("[amsg:xhs-roam] next check could not be scheduled", String(error));
+      }
+    }
+    if (blockedByDailyCap) return { skip: true, reason: "xhs-roam-daily-cap" };
+    XhsMcpClient.setCookie(xhs.cookie);
+    XhsMcpClient.setAccessCredentials(xhs.accessClientId, xhs.accessClientSecret);
+    return {
+      state: { job, serverUrl: xhs.serverUrl, timestamp: timestamp2, eventId },
+      messages: [
+        { role: "system", content: `\u4F60\u662F${job.charName}\u3002\u4EE5\u4E0B\u662F\u4F60\u7684\u4EBA\u8BBE\uFF1A
+${job.persona || "\u4FDD\u7559\u81EA\u7136\u3001\u514B\u5236\u7684\u89D2\u8272\u8BED\u6C14\u3002"}
+
+\u73B0\u5728\u662F\u4F60\u5076\u5C14\u81EA\u5DF1\u770B\u770B\u5C0F\u7EA2\u4E66\u7684\u7A7A\u95F2\u65F6\u95F4\u3002\u7ED3\u5408\u4EBA\u8BBE\u51B3\u5B9A\u662F\u5426\u60F3\u5237\uFF1B\u53EA\u8FD4\u56DE JSON\uFF1A{"action":"silent","thinking":"\u7B80\u77ED\u539F\u56E0"}\u3001{"action":"browse","thinking":"\u7B80\u77ED\u539F\u56E0"} \u6216 {"action":"search","keyword":"\u77ED\u5173\u952E\u8BCD","thinking":"\u7B80\u77ED\u539F\u56E0"}\u3002\u6CA1\u6709\u5174\u8DA3\u5C31 silent\u3002\u7EDD\u4E0D\u70B9\u8D5E\u3001\u6536\u85CF\u3001\u8BC4\u8BBA\u3001\u56DE\u590D\u3001\u5173\u6CE8\u3001\u79C1\u4FE1\u6216\u53D1\u5E16\u3002` },
+        { role: "user", content: "\u8FD9\u6B21\u4F60\u60F3\u770B\u770B\u5C0F\u7EA2\u4E66\u5417\uFF1F" }
+      ],
+      totalTimeoutMs: 45e3
+    };
+  },
+  async llmOutput({ ctx, state }) {
+    const { job, serverUrl, timestamp: timestamp2, eventId } = state;
+    const decision = parseDecision(ctx.llmOutputText || "");
+    if (!decision) return { decision: "skip-push", reason: "xhs-roam-invalid-decision" };
+    if (decision.action === "silent") {
+      await ctx.emitResult?.({ ...buildXhsRoamActivityResult({
+        eventId,
+        charId: job.charId,
+        timestamp: timestamp2,
+        actionType: "idle",
+        thinking: decision.thinking,
+        result: "skipped",
+        resultMessage: "\u89D2\u8272\u51B3\u5B9A\u8FD9\u6B21\u5148\u4E0D\u5237\u3002"
+      }), notification: { show: false } });
+      return { decision: "skip-push", reason: "xhs-roam-model-chose-silence" };
+    }
+    const signal = typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(45e3) : void 0;
+    const result = decision.action === "search" ? await XhsMcpClient.search(serverUrl, decision.keyword || "\u60C5\u4FA3\u5934\u50CF", void 0, signal) : await XhsMcpClient.getRecommend(serverUrl, signal);
+    if (!result.success) {
+      console.warn("[amsg:xhs-roam] read failed; no card emitted", result.error);
+      await ctx.emitResult?.({ ...buildXhsRoamActivityResult({
+        eventId,
+        charId: job.charId,
+        timestamp: timestamp2,
+        actionType: decision.action,
+        thinking: decision.thinking,
+        result: "failed",
+        resultMessage: "\u8FD9\u6B21\u8FDE\u63A5\u5C0F\u7EA2\u4E66\u5931\u8D25\u4E86\uFF0C\u6CA1\u6709\u4F2A\u88C5\u6210\u5DF2\u7ECF\u770B\u8FC7\u3002",
+        ...decision.keyword ? { keyword: decision.keyword } : {}
+      }), notification: { show: false } });
+      return { decision: "skip-push", reason: "xhs-roam-read-failed" };
+    }
+    const notes = extractNotesFromMcpData(result.data).map(normalizeNote).filter((note2) => note2.noteId && note2.title && note2.url).slice(0, 12);
+    if (notes.length === 0) {
+      await ctx.emitResult?.({ ...buildXhsRoamActivityResult({
+        eventId,
+        charId: job.charId,
+        timestamp: timestamp2,
+        actionType: decision.action,
+        thinking: decision.thinking,
+        result: "success",
+        resultMessage: "\u770B\u8FC7\u4E86\uFF0C\u4F46\u8FD9\u6B21\u6CA1\u6709\u627E\u5230\u9002\u5408\u5206\u4EAB\u7684\u7B14\u8BB0\u3002",
+        ...decision.keyword ? { keyword: decision.keyword } : {}
+      }), notification: { show: false } });
+      return { decision: "skip-push", reason: "xhs-roam-no-shareable-notes" };
+    }
+    if (typeof ctx.emitResult !== "function") return { decision: "skip-push", reason: "xhs-roam-result-channel-unavailable" };
+    const note = notes[0];
+    await ctx.emitResult({
+      ...buildXhsRoamCardResult({
+        charId: job.charId,
+        charName: job.charName,
+        note,
+        eventId,
+        timestamp: timestamp2,
+        actionType: decision.action,
+        thinking: decision.thinking,
+        resultMessage: "\u53D1\u73B0\u5E76\u5206\u4EAB\u4E86\u4E00\u7BC7\u7B14\u8BB0\u3002",
+        message: decision.action === "search" ? `\u6211\u521A\u521A\u53BB\u5C0F\u7EA2\u4E66\u770B\u4E86\u300C${decision.keyword || ""}\u300D\uFF0C\u6709\u4E00\u7BC7\u60F3\u7ED9\u4F60\u770B\u770B\u3002` : "\u6211\u521A\u521A\u5237\u5230\u4E00\u7BC7\uFF0C\u89C9\u5F97\u4F60\u53EF\u80FD\u4F1A\u559C\u6B22\uFF0C\u53D1\u7ED9\u4F60\u770B\u770B\uFF5E"
+      }),
+      notification: { show: false }
+    });
+    return { decision: "skip-push", reason: "xhs-roam-card-emitted" };
+  }
+};
+
 // worker/amsg/src/fireKinds.ts
 var FIRE_KIND_HANDLERS = Object.assign(
   /* @__PURE__ */ Object.create(null),
-  { [PLATE_CONSOLIDATE_KIND]: plateConsolidateHandler }
+  {
+    [PLATE_CONSOLIDATE_KIND]: plateConsolidateHandler,
+    [XHS_ROAM_CHECK_KIND]: xhsRoamCheckHandler
+  }
 );
 var KIND_FIRE_SCRATCH_KEY = "kindFire";
 var putKindFireStash = (scratch, kind, state) => {
@@ -15252,897 +16410,6 @@ var feishuGetDiaryByDate = async (appId, appSecret, baseId, tableId, characterNa
   }
 };
 
-// utils/networkFailureDiagnosis.ts
-var readError = (error) => {
-  if (error instanceof Error) return { name: error.name || "Error", message: error.message || String(error) };
-  if (error && typeof error === "object") {
-    const anyErr = error;
-    return {
-      name: typeof anyErr.name === "string" ? anyErr.name : "Error",
-      message: typeof anyErr.message === "string" ? anyErr.message : String(error)
-    };
-  }
-  return { name: "Error", message: String(error ?? "") };
-};
-var looksLikeNetworkError = (message) => /failed to fetch/i.test(message) || /load failed/i.test(message) || /networkerror/i.test(message) || /network request failed/i.test(message);
-var parseTargetUrl = (url, base) => {
-  try {
-    const parsed = new URL(url, base || (typeof location !== "undefined" ? location.href : void 0));
-    return { ok: true, origin: parsed.origin, host: parsed.host, protocol: parsed.protocol, href: parsed.href };
-  } catch {
-    return { ok: false, origin: "", host: "", protocol: "", href: url };
-  }
-};
-var isLoopbackHost = (host) => /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host);
-var classifyFetchFailure = (ctx) => {
-  const { name, message } = readError(ctx.error);
-  if (name === "TimeoutError" || /timed?\s?out|timeout/i.test(message)) return "timeout";
-  if (name === "AbortError" || /aborted|abort/i.test(message)) return "aborted";
-  const target = parseTargetUrl(ctx.url);
-  if (!target.ok) return "bad-url";
-  const pageProtocol = ctx.pageProtocol ?? (typeof location !== "undefined" ? location.protocol : "");
-  if (pageProtocol === "https:" && target.protocol === "http:" && !isLoopbackHost(target.host)) return "mixed-content";
-  const online = ctx.online ?? (typeof navigator !== "undefined" ? navigator.onLine : true);
-  if (online === false) return "offline";
-  if (looksLikeNetworkError(message) || name === "TypeError") return "blocked";
-  return "unknown";
-};
-
-// utils/xhsMcpClient.ts
-var XHS_SPIDER_V3_EXPERIMENT = Object.freeze({
-  optInValue: "spider-v3-isolated-cookie",
-  strategyKey: "os_xhs_spider_v3_strategy",
-  sessionKey: "os_xhs_spider_v3_session",
-  circuitKey: "os_xhs_spider_v3_circuit"
-});
-var detectMode = (serverUrl) => {
-  if (serverUrl.includes("/api")) return "bridge";
-  return "mcp";
-};
-var liteCookie = "";
-var litePlatform = "auto";
-var resolveLiteCookie = () => {
-  if (liteCookie) return liteCookie;
-  try {
-    const raw = localStorage.getItem("os_realtime_config");
-    if (raw) return JSON.parse(raw)?.xhsMcpConfig?.cookie || "";
-  } catch {
-  }
-  return "";
-};
-var resolvePersistedLitePlatform = () => {
-  try {
-    const raw = localStorage.getItem("os_realtime_config");
-    const platform = raw ? JSON.parse(raw)?.xhsMcpConfig?.platform : void 0;
-    return platform === "xhs" || platform === "rednote" ? platform : "auto";
-  } catch {
-    return "auto";
-  }
-};
-var spiderStorage = () => {
-  try {
-    return typeof localStorage === "undefined" ? null : localStorage;
-  } catch {
-    return null;
-  }
-};
-var readSpiderJson = (key) => {
-  try {
-    const raw = spiderStorage()?.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-};
-var writeSpiderJson = (key, value) => {
-  try {
-    spiderStorage()?.setItem(key, JSON.stringify(value));
-  } catch {
-  }
-};
-var removeSpiderValue = (key) => {
-  try {
-    spiderStorage()?.removeItem(key);
-  } catch {
-  }
-};
-var spiderCookieTag = async (cookie) => {
-  const a1 = cookie.match(/(?:^|;\s*)a1=([^;]+)/)?.[1] || "";
-  if (!a1) return "";
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(a1));
-  return Array.from(new Uint8Array(digest).slice(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
-};
-var withSpiderCircuitError = (detail, message) => ({
-  ...detail,
-  data: {
-    ...detail?.data || {},
-    comments_status: "unavailable",
-    comments_error: {
-      code: "SPIDER_V3_CIRCUIT_OPEN",
-      message
-    }
-  }
-});
-var trySpiderV3CommentPatch = async (baseUrl, requestBody, cookie, detail, signal) => {
-  signal?.throwIfAborted();
-  const storage = spiderStorage();
-  if (!storage || detail?.data?.comments_status === "loaded" || detail?.platform === "rednote" || detail?.data?.platform === "rednote") {
-    return detail;
-  }
-  const a1Tag = await spiderCookieTag(cookie);
-  if (!a1Tag) return detail;
-  let sessionState = readSpiderJson(XHS_SPIDER_V3_EXPERIMENT.sessionKey);
-  if (sessionState?.a1Tag !== a1Tag) {
-    sessionState = null;
-    removeSpiderValue(XHS_SPIDER_V3_EXPERIMENT.sessionKey);
-    removeSpiderValue(XHS_SPIDER_V3_EXPERIMENT.circuitKey);
-  }
-  const circuit = readSpiderJson(XHS_SPIDER_V3_EXPERIMENT.circuitKey);
-  if (circuit?.a1Tag === a1Tag) {
-    return withSpiderCircuitError(detail, "Spider v3 received HTTP 406 earlier and is circuit-broken for this cookie.");
-  }
-  const requestedStrategy = storage.getItem(XHS_SPIDER_V3_EXPERIMENT.strategyKey) || "no-client-hints";
-  const strategy = ["no-client-hints", "browser-hints", "legacy-transport"].includes(requestedStrategy) ? requestedStrategy : "no-client-hints";
-  try {
-    const response = await fetch(`${baseUrl}/api/xhs-experimental-comments`, {
-      signal,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-xhs-cookie": cookie,
-        ...litePlatform !== "auto" ? { "x-xhs-platform": litePlatform } : {},
-        "x-xhs-experiment-ack": XHS_SPIDER_V3_EXPERIMENT.optInValue
-      },
-      body: JSON.stringify({
-        acknowledge_risk: true,
-        feed_id: requestBody.feed_id,
-        xsec_token: requestBody.xsec_token || "",
-        strategy,
-        session_state: sessionState || void 0
-      })
-    });
-    const experiment = await response.json().catch(() => null);
-    if (experiment?.session_state) {
-      writeSpiderJson(XHS_SPIDER_V3_EXPERIMENT.sessionKey, experiment.session_state);
-    }
-    if (experiment?.error_code === "XHS_EXPERIMENT_HTTP_406") {
-      writeSpiderJson(XHS_SPIDER_V3_EXPERIMENT.circuitKey, {
-        a1Tag,
-        openedAt: Date.now(),
-        reason: experiment.error_code
-      });
-      return withSpiderCircuitError(detail, "Spider v3 was rejected with HTTP 406; automatic comment attempts are now stopped.");
-    }
-    if (!response.ok || !experiment?.success || !experiment?.data) return detail;
-    removeSpiderValue(XHS_SPIDER_V3_EXPERIMENT.circuitKey);
-    return {
-      ...detail,
-      data: {
-        ...detail?.data || {},
-        ...experiment.data,
-        comments_error: void 0
-      }
-    };
-  } catch {
-    signal?.throwIfAborted();
-    return detail;
-  }
-};
-var bridgePost = async (serverUrl, endpoint, body = {}, signal) => {
-  signal?.throwIfAborted();
-  const baseUrl = serverUrl.replace(/\/+$/, "").replace(/\/api$/, "");
-  const url = `${baseUrl}/api/${endpoint}`;
-  const headers = { "Content-Type": "application/json" };
-  const ck = resolveLiteCookie();
-  if (ck) headers["x-xhs-cookie"] = ck;
-  const requestPlatform = endpoint === "check-login" ? litePlatform : litePlatform === "auto" ? resolvePersistedLitePlatform() : litePlatform;
-  if (requestPlatform !== "auto") headers["x-xhs-platform"] = requestPlatform;
-  try {
-    const resp = await fetch(url, {
-      signal,
-      method: "POST",
-      headers,
-      body: JSON.stringify(body)
-    });
-    if (resp.status === 401) {
-      return { success: false, error: "\u672A\u767B\u5F55\uFF0C\u8BF7\u5148\u767B\u5F55\u5C0F\u7EA2\u4E66" };
-    }
-    if (!resp.ok) {
-      const errData = await resp.json().catch(() => ({}));
-      return { success: false, error: errData.error || `HTTP ${resp.status}` };
-    }
-    let data = await resp.json();
-    if (data.error) {
-      return { success: false, error: data.error };
-    }
-    const detectedPlatform = data?.platform || data?.data?.platform;
-    if (detectedPlatform === "xhs" || detectedPlatform === "rednote") {
-      litePlatform = detectedPlatform;
-    }
-    if (endpoint === "get-feed-detail" && ck) {
-      data = await trySpiderV3CommentPatch(baseUrl, body, ck, data, signal);
-    }
-    return { success: true, data };
-  } catch (e) {
-    signal?.throwIfAborted();
-    return { success: false, error: e.message };
-  }
-};
-var mcpRequestIdCounter = 0;
-var mcpSessionId = null;
-var mcpInitialized = false;
-var mcpInitPromise = null;
-var mcpDiscoveredTools = [];
-var TOOL_NAME_ALIASES = {
-  "check_login": ["check_login", "checkLogin", "check_login_status", "checkLoginStatus"],
-  "search": ["search", "search_notes", "searchNotes", "search_feeds", "searchFeeds"],
-  "get_recommend": ["get_recommend", "getRecommend", "list_feeds", "listFeeds", "get_feed_list", "getFeedList", "list_notes", "listNotes"],
-  "get_note_detail": ["get_note_detail", "getNoteDetail", "get_feed_detail", "getFeedDetail"],
-  "publish_note": ["publish_note", "publishNote", "publish_post", "publishPost", "publish_content", "publishContent"],
-  "comment": ["comment", "post_comment", "postComment", "post_comment_to_feed", "postCommentToFeed"],
-  "get_user_info": ["get_user_info", "getUserInfo", "get_user_profile", "getUserProfile", "user_profile", "userProfile"],
-  "like_feed": ["like_feed", "likeFeed", "like_note", "likeNote"],
-  "favorite_feed": ["favorite_feed", "favoriteFeed", "favorite_note", "favoriteNote", "collect_note", "collectNote"],
-  "reply_comment": ["reply_comment", "replyComment", "reply_comment_in_feed", "replyCommentInFeed"]
-};
-var mcpResolveToolName = (desiredName) => {
-  if (!mcpDiscoveredTools.length) return desiredName;
-  if (mcpDiscoveredTools.some((t) => t.name === desiredName)) return desiredName;
-  const aliases = TOOL_NAME_ALIASES[desiredName];
-  if (aliases) {
-    for (const alias of aliases) {
-      if (mcpDiscoveredTools.some((t) => t.name === alias)) return alias;
-    }
-  }
-  const norm = (s) => s.replace(/[_-]/g, "").toLowerCase();
-  const desired = norm(desiredName);
-  const match = mcpDiscoveredTools.find((t) => norm(t.name) === desired);
-  if (match) return match.name;
-  console.warn(`[MCP] \u672A\u627E\u5230\u5DE5\u5177 "${desiredName}" \u7684\u5339\u914D\uFF0C\u53EF\u7528: ${mcpDiscoveredTools.map((t) => t.name).join(", ")}`);
-  return desiredName;
-};
-var mcpAdaptParams = (resolvedName, args) => {
-  const norm = resolvedName.replace(/[_-]/g, "").toLowerCase();
-  if (args.url && !args.feed_id) {
-    const feedIdTools = ["getfeeddetail", "getnotedetail", "postcomment", "postcommenttofeed", "replycommentinfeed"];
-    if (feedIdTools.some((n) => norm === n)) {
-      const adapted = { ...args };
-      adapted.feed_id = extractNoteIdFromUrl(args.url);
-      if (!adapted.xsec_token) {
-        const token = extractXsecTokenFromUrl(args.url);
-        if (token) adapted.xsec_token = token;
-      }
-      delete adapted.url;
-      return adapted;
-    }
-  }
-  return args;
-};
-var mcpBuildRequest = (method, params, isNotification = false) => {
-  const req = { jsonrpc: "2.0", method, params };
-  if (!isNotification) req.id = ++mcpRequestIdCounter;
-  return req;
-};
-var mcpParseSseResponse = (text2) => {
-  const lines = text2.split("\n");
-  const dataLines = [];
-  for (const line of lines) {
-    if (line.startsWith("data: ")) dataLines.push(line.slice(6));
-    else if (line.startsWith("data:")) dataLines.push(line.slice(5));
-  }
-  if (dataLines.length === 0) return null;
-  for (let i = dataLines.length - 1; i >= 0; i--) {
-    try {
-      return JSON.parse(dataLines[i]);
-    } catch {
-      continue;
-    }
-  }
-  return null;
-};
-var mcpParseResponse = (text2, contentType) => {
-  if (contentType.includes("text/event-stream") || text2.trimStart().startsWith("event:") || text2.trimStart().startsWith("data:")) {
-    const parsed = mcpParseSseResponse(text2);
-    if (parsed) return parsed;
-  }
-  try {
-    return JSON.parse(text2);
-  } catch {
-    const match = text2.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-      }
-    }
-    throw new Error(`MCP: \u65E0\u6CD5\u89E3\u6790\u54CD\u5E94: ${text2.slice(0, 300)}`);
-  }
-};
-var mcpPost = async (serverUrl, body, expectResponse = true, signal) => {
-  signal?.throwIfAborted();
-  const headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json, text/event-stream"
-  };
-  if (mcpSessionId) headers["Mcp-Session-Id"] = mcpSessionId;
-  const resp = await fetch(serverUrl, { signal, method: "POST", headers, body: JSON.stringify(body) });
-  const sessionId = resp.headers.get("Mcp-Session-Id") || resp.headers.get("mcp-session-id");
-  if (resp.status === 202) return { response: null, sessionId };
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`MCP HTTP ${resp.status}: ${errText.slice(0, 200)}`);
-  }
-  if (!expectResponse) return { response: null, sessionId };
-  const contentType = resp.headers.get("content-type") || "";
-  const text2 = await resp.text();
-  return { response: mcpParseResponse(text2, contentType), sessionId };
-};
-var mcpInitialize = async (serverUrl, signal) => {
-  signal?.throwIfAborted();
-  const initReq = mcpBuildRequest("initialize", {
-    protocolVersion: "2024-11-05",
-    capabilities: {},
-    clientInfo: { name: "AetherOS-XhsFreeRoam", version: "1.0.0" }
-  });
-  const { response, sessionId } = await mcpPost(serverUrl, initReq, void 0, signal);
-  if (sessionId) mcpSessionId = sessionId;
-  if (response?.error) throw new Error(`MCP Initialize failed: ${response.error.message}`);
-  if (!mcpSessionId) {
-    console.warn(
-      "[MCP] \u26A0\uFE0F \u65E0\u6CD5\u8BFB\u53D6 Mcp-Session-Id \u54CD\u5E94\u5934\uFF08CORS \u9650\u5236\uFF09\u3002\n\u8BF7\u4F7F\u7528 CORS \u4EE3\u7406: node scripts/mcp-proxy.mjs\n\u7136\u540E\u628A MCP URL \u6539\u4E3A http://localhost:18061/mcp"
-    );
-    throw new Error(
-      "MCP \u8FDE\u63A5\u5931\u8D25: \u6D4F\u89C8\u5668 CORS \u9650\u5236\u65E0\u6CD5\u8BFB\u53D6 Session ID\u3002\n\u8BF7\u8FD0\u884C CORS \u4EE3\u7406: node scripts/mcp-proxy.mjs\n\u7136\u540E\u628A\u8BBE\u7F6E\u91CC\u7684 MCP URL \u6539\u4E3A http://localhost:18061/mcp"
-    );
-  }
-  const notifReq = mcpBuildRequest("notifications/initialized", {}, true);
-  await mcpPost(serverUrl, notifReq, false, signal);
-  try {
-    const toolsReq = mcpBuildRequest("tools/list");
-    const { response: toolsResp } = await mcpPost(serverUrl, toolsReq, void 0, signal);
-    if (toolsResp?.result?.tools) {
-      mcpDiscoveredTools = toolsResp.result.tools.map((t) => ({ name: t.name, description: t.description }));
-      console.log("[MCP] \u53D1\u73B0\u5DE5\u5177:", mcpDiscoveredTools.map((t) => t.name).join(", "));
-    }
-  } catch (e) {
-    signal?.throwIfAborted();
-    console.warn("[MCP] tools/list \u8C03\u7528\u5931\u8D25\uFF0C\u5C06\u4F7F\u7528\u9ED8\u8BA4\u5DE5\u5177\u540D", e);
-  }
-  mcpInitialized = true;
-};
-var mcpEnsureInitialized = async (serverUrl, signal) => {
-  signal?.throwIfAborted();
-  if (mcpInitialized) return;
-  if (!mcpInitPromise) {
-    mcpInitPromise = mcpInitialize(serverUrl, signal).finally(() => {
-      mcpInitPromise = null;
-    });
-  }
-  await mcpInitPromise;
-};
-var mcpCallTool = async (serverUrl, toolName, args = {}, signal) => {
-  signal?.throwIfAborted();
-  try {
-    await mcpEnsureInitialized(serverUrl, signal);
-    const resolved = mcpResolveToolName(toolName);
-    const adapted = mcpAdaptParams(resolved, args);
-    if (resolved !== toolName) console.log(`[MCP] \u5DE5\u5177\u540D\u6620\u5C04: ${toolName} \u2192 ${resolved}`);
-    const body = mcpBuildRequest("tools/call", { name: resolved, arguments: adapted });
-    const headers = {
-      "Content-Type": "application/json",
-      "Accept": "application/json, text/event-stream"
-    };
-    if (mcpSessionId) headers["Mcp-Session-Id"] = mcpSessionId;
-    const resp = await fetch(serverUrl, { signal, method: "POST", headers, body: JSON.stringify(body) });
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      return { success: false, error: `MCP HTTP ${resp.status}: ${errText.slice(0, 200)}` };
-    }
-    const contentType = resp.headers.get("content-type") || "";
-    const text2 = await resp.text();
-    const parsed = mcpParseResponse(text2, contentType);
-    if (parsed.error) return { success: false, error: `MCP Error [${parsed.error.code}]: ${parsed.error.message}` };
-    const result = parsed.result;
-    if (result?.content) {
-      const textParts = result.content.filter((c) => c.type === "text").map((c) => c.text);
-      const fullText = textParts.join("\n");
-      if (result.isError) return { success: false, error: fullText || "MCP \u5DE5\u5177\u6267\u884C\u5931\u8D25" };
-      try {
-        const parsed2 = JSON.parse(fullText);
-        console.log(`[MCP] \u5DE5\u5177 ${toolName} \u8FD4\u56DE JSON, \u9876\u5C42 keys: ${typeof parsed2 === "object" && parsed2 ? Object.keys(parsed2).join(",") : typeof parsed2}`);
-        return { success: true, data: parsed2 };
-      } catch {
-        signal?.throwIfAborted();
-        console.log(`[MCP] \u5DE5\u5177 ${toolName} \u8FD4\u56DE\u7EAF\u6587\u672C (${fullText.length} chars)`);
-        return { success: true, data: fullText };
-      }
-    }
-    return { success: true, data: result };
-  } catch (e) {
-    signal?.throwIfAborted();
-    return { success: false, error: e.message };
-  }
-};
-var extractNoteIdFromUrl = (url) => {
-  const match = url.match(/\/explore\/([a-f0-9]+)/i) || url.match(/\/discovery\/item\/([a-f0-9]+)/i) || url.match(/\/([a-f0-9]{24})/);
-  return match ? match[1] : url;
-};
-var extractXsecTokenFromUrl = (url) => {
-  try {
-    const u = new URL(url);
-    return u.searchParams.get("xsec_token") || void 0;
-  } catch {
-    return void 0;
-  }
-};
-var extractFirstXsecToken = (data) => {
-  if (!data) return void 0;
-  const scanArray = (arr) => {
-    for (const item of arr) {
-      const token = item?.xsec_token || item?.xsecToken || item?.noteCard?.xsec_token || item?.noteCard?.xsecToken;
-      if (token) return token;
-    }
-    return void 0;
-  };
-  if (Array.isArray(data)) return scanArray(data);
-  for (const key of ["items", "notes", "feeds", "data", "list", "results", "note_list", "noteList"]) {
-    if (Array.isArray(data[key])) {
-      const token = scanArray(data[key]);
-      if (token) return token;
-    }
-  }
-  if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
-    for (const key of ["items", "notes", "feeds", "list", "results", "note_list", "noteList"]) {
-      if (Array.isArray(data.data[key])) {
-        const token = scanArray(data.data[key]);
-        if (token) return token;
-      }
-    }
-    if (Array.isArray(data.data)) return scanArray(data.data);
-  }
-  if (typeof data === "string") {
-    const match = data.match(/xsec_token[=:]["']?\s*([A-Za-z0-9+/=]+)/);
-    if (match) return match[1];
-  }
-  return void 0;
-};
-var describeXhsConnectFailure = (e, serverUrl) => {
-  const host = parseTargetUrl(serverUrl).host || serverUrl;
-  const kind = classifyFetchFailure({ url: serverUrl, error: e });
-  switch (kind) {
-    case "timeout":
-      return `\u8FDE\u63A5 ${host} \u8D85\u65F6\uFF0810 \u79D2\u4E00\u4E2A\u5B57\u8282\u90FD\u6CA1\u56DE\uFF09\u3002\u8FDE\u63A5\u662F\u6302\u4F4F\u4E0D\u8FD4\u56DE\u3001\u4E0D\u662F\u88AB\u62D2\u2014\u2014\u591A\u534A\u662F\u8BE5\u57DF\u540D\u6CA1\u8D70\u4EE3\u7406\u8D70\u4E86\u76F4\u8FDE\uFF0C\u6216\u4EE3\u7406\u8282\u70B9\u5230\u4E0A\u6E38\u662F\u9ED1\u6D1E\u3002\u4F18\u5148\u6362\u4E2A\u68AF\u5B50\u8282\u70B9\u3001\u6216\u628A\u8FD9\u4E2A\u57DF\u540D\u663E\u5F0F\u52A0\u8FDB\u4EE3\u7406\u89C4\u5219\u3002`;
-    case "aborted":
-      return "\u8FDE\u63A5\u88AB\u53D6\u6D88\uFF08\u9875\u9762\u5207\u8D70\u4E86\u6216\u624B\u52A8\u505C\u6B62\uFF09\u3002";
-    case "offline":
-      return "\u5F53\u524D\u5904\u4E8E\u79BB\u7EBF\u72B6\u6001\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u6216\u68AF\u5B50\u662F\u5426\u6389\u7EBF\u3002";
-    case "mixed-content":
-      return `SullyOS \u8DD1\u5728 https \u4E0A\uFF0C\u4E0D\u80FD\u8FDE http \u5730\u5740\uFF08${host}\uFF09\u3002\u8BF7\u628A\u670D\u52A1\u5730\u5740\u6539\u6210 https://\uFF0C\u6216\u7528\u672C\u5730 http \u6253\u5F00 SullyOS\u3002`;
-    case "bad-url":
-      return `\u670D\u52A1\u5668\u5730\u5740\u4E0D\u662F\u5408\u6CD5 URL\uFF1A${serverUrl}\u3002\u68C0\u67E5\u6709\u6CA1\u6709\u6F0F\u6389 https://\u3001\u591A\u4E86\u7A7A\u683C\u6216\u7528\u4E86\u4E2D\u6587\u6807\u70B9\u3002`;
-    case "blocked":
-      return `\u8FDE\u4E0D\u4E0A ${host}\uFF1A\u6D4F\u89C8\u5668\u5728\u62FF\u5230\u54CD\u5E94\u524D\u5C31\u5931\u8D25\u4E86\u3002\u5E38\u89C1\u539F\u56E0\u2014\u2014\u68AF\u5B50/\u4EE3\u7406\u62E6\u4E86\u8FD9\u4E2A\u57DF\u540D\u3001DNS \u89E3\u6790\u4E0D\u5230\u3001\u6D4F\u89C8\u5668\u6269\u5C55\uFF08\u5E7F\u544A\u62E6\u622A/\u9690\u79C1\u76FE\uFF09\u5C4F\u853D\u4E86\uFF0C\u6216\u5BF9\u65B9\u6B63\u8FD4\u56DE\u9650\u6D41/\u4EBA\u673A\u9A8C\u8BC1\u9875\u3002\u53EF\u5728\u65B0\u6807\u7B7E\u9875\u76F4\u63A5\u6253\u5F00 ${serverUrl.replace(/\/+$/, "")}/health \u9A8C\u8BC1\uFF1B\u8BE6\u7EC6\u65C1\u8BC1\u89C1\u300C\u7CFB\u7EDF\u8C03\u8BD5\u7EC8\u7AEF\u300D\u3002`;
-    default:
-      return e?.message || "\u8FDE\u63A5\u5931\u8D25";
-  }
-};
-var XhsMcpClient = {
-  resetSession: () => {
-    mcpSessionId = null;
-    mcpInitialized = false;
-    mcpRequestIdCounter = 0;
-    mcpDiscoveredTools = [];
-  },
-  // Lite Worker auth: register the XHS cookie used for x-xhs-cookie header.
-  setCookie: (cookie) => {
-    const nextCookie = cookie || "";
-    if (nextCookie !== liteCookie) litePlatform = "auto";
-    liteCookie = nextCookie;
-  },
-  testConnection: async (serverUrl, cookie, signal) => {
-    signal?.throwIfAborted();
-    if (cookie !== void 0) XhsMcpClient.setCookie(cookie);
-    const mode = detectMode(serverUrl);
-    if (mode === "bridge") {
-      try {
-        const baseUrl = serverUrl.replace(/\/+$/, "").replace(/\/api$/, "");
-        const healthResp = await fetch(`${baseUrl}/api/health`, {
-          signal: signal ?? (typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(1e4) : void 0)
-        });
-        if (!healthResp.ok) return { connected: false, error: `Bridge \u670D\u52A1\u672A\u54CD\u5E94 (HTTP ${healthResp.status})` };
-        const loginResult = await bridgePost(serverUrl, "check-login", void 0, signal);
-        const tools = ["check-login", "search", "list-feeds", "get-feed-detail", "publish", "publish-video", "long-article", "post-comment", "reply-comment", "like-feed", "favorite-feed", "user-profile", "login", "get-qrcode"];
-        let loggedIn = false, nickname, userId, platform;
-        if (loginResult.success && loginResult.data) {
-          const d = loginResult.data;
-          if (typeof d === "string") {
-            loggedIn = d.includes("\u5DF2\u767B\u5F55") || d.includes("logged");
-            const nameMatch = d.match(/用户名[:：]\s*(.+)/);
-            if (nameMatch) nickname = nameMatch[1].trim();
-            const idMatch = d.match(/(?:用户ID|user_id|userId|red_id|ID)[:：]\s*(\S+)/i);
-            if (idMatch) userId = idMatch[1].trim();
-          } else {
-            loggedIn = !!(d.logged_in || d.loggedIn || d.is_logged_in || d.isLoggedIn || d.logged);
-            nickname = d.nickname || d.name || d.username || d.user_name || void 0;
-            userId = d.user_id || d.userId || d.id || d.red_id || void 0;
-            platform = d.platform === "xhs" || d.platform === "rednote" ? d.platform : void 0;
-          }
-        }
-        let xsecToken;
-        if (loggedIn) {
-          try {
-            const feedResult = await bridgePost(serverUrl, "list-feeds", void 0, signal);
-            if (feedResult.success) xsecToken = extractFirstXsecToken(feedResult.data);
-          } catch {
-            signal?.throwIfAborted();
-          }
-        }
-        return { connected: true, tools, nickname, userId, loggedIn, xsecToken, platform };
-      } catch (e) {
-        signal?.throwIfAborted();
-        return { connected: false, error: describeXhsConnectFailure(e, serverUrl) };
-      }
-    }
-    try {
-      XhsMcpClient.resetSession();
-      await mcpInitialize(serverUrl, signal);
-      const tools = mcpDiscoveredTools.map((t) => t.name);
-      let nickname, userId, loggedIn = false;
-      try {
-        const loginResult = await mcpCallTool(serverUrl, "check_login", void 0, signal);
-        if (loginResult.success && loginResult.data) {
-          const d = loginResult.data;
-          if (typeof d === "string") {
-            loggedIn = d.includes("\u5DF2\u767B\u5F55");
-            const nameMatch = d.match(/用户名[:：]\s*(.+)/);
-            if (nameMatch) nickname = nameMatch[1].trim();
-            const idMatch = d.match(/(?:用户ID|user_id|userId|red_id|ID)[:：]\s*(\S+)/i);
-            if (idMatch) userId = idMatch[1].trim();
-          } else {
-            loggedIn = !!(d.logged_in || d.loggedIn || d.is_logged_in || d.isLoggedIn);
-            nickname = d.nickname || d.name || d.username || void 0;
-            userId = d.user_id || d.userId || d.id || d.red_id || void 0;
-          }
-        }
-      } catch (e) {
-        signal?.throwIfAborted();
-        console.warn("[MCP] \u83B7\u53D6\u767B\u5F55\u72B6\u6001\u5931\u8D25\uFF0C\u8DF3\u8FC7:", e);
-      }
-      let xsecToken;
-      if (loggedIn) {
-        try {
-          console.log("[MCP] \u81EA\u52A8\u83B7\u53D6 xsecToken: \u8C03\u7528 get_recommend...");
-          const feedResult = await mcpCallTool(serverUrl, "get_recommend", void 0, signal);
-          if (feedResult.success) {
-            xsecToken = extractFirstXsecToken(feedResult.data);
-            console.log(`[MCP] \u81EA\u52A8\u83B7\u53D6 xsecToken: ${xsecToken ? "\u6210\u529F" : "\u672A\u627E\u5230"}`);
-          }
-        } catch (e) {
-          signal?.throwIfAborted();
-          console.warn("[MCP] \u81EA\u52A8\u83B7\u53D6 xsecToken \u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u8FDE\u63A5\uFF09:", e);
-        }
-      }
-      return { connected: true, tools, nickname, userId, loggedIn, xsecToken };
-    } catch (e) {
-      signal?.throwIfAborted();
-      return { connected: false, error: e.message };
-    }
-  },
-  ensureInitialized: async (serverUrl, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "mcp" && !mcpInitialized) {
-      XhsMcpClient.resetSession();
-      await mcpInitialize(serverUrl, signal);
-    }
-  },
-  checkLogin: async (serverUrl, signal) => {
-    signal?.throwIfAborted();
-    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "check-login", void 0, signal) : mcpCallTool(serverUrl, "check_login", void 0, signal);
-  },
-  search: async (serverUrl, keyword, options, signal) => {
-    signal?.throwIfAborted();
-    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "search", { keyword, ...options }, signal) : mcpCallTool(serverUrl, "search", { keyword }, signal);
-  },
-  getRecommend: async (serverUrl, signal) => {
-    signal?.throwIfAborted();
-    return detectMode(serverUrl) === "bridge" ? bridgePost(serverUrl, "list-feeds", void 0, signal) : mcpCallTool(serverUrl, "get_recommend", void 0, signal);
-  },
-  getNoteDetail: async (serverUrl, noteUrl, xsecToken, options, signal) => {
-    signal?.throwIfAborted();
-    const feedId = extractNoteIdFromUrl(noteUrl);
-    const token = xsecToken || extractXsecTokenFromUrl(noteUrl) || "";
-    const loadAllComments = !!options?.loadAllComments;
-    let xsecSource = options?.xsecSource || "pc_feed";
-    try {
-      xsecSource = new URL(noteUrl).searchParams.get("xsec_source") || xsecSource;
-    } catch {
-      signal?.throwIfAborted();
-    }
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "get-feed-detail", {
-        feed_id: feedId,
-        xsec_token: token,
-        xsec_source: xsecSource,
-        load_all_comments: loadAllComments,
-        click_more_replies: loadAllComments
-      }, signal);
-    }
-    const args = { url: noteUrl };
-    if (xsecToken) args.xsec_token = xsecToken;
-    if (loadAllComments) {
-      args.load_all_comments = true;
-      args.click_more_replies = true;
-    }
-    return mcpCallTool(serverUrl, "get_note_detail", args, signal);
-  },
-  publishNote: async (serverUrl, params, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "publish", {
-        title: params.title,
-        content: params.content,
-        images: params.images || [],
-        tags: params.tags || [],
-        visibility: params.is_private ? "private" : void 0
-      }, signal);
-    }
-    return mcpCallTool(serverUrl, "publish_note", { ...params, images: params.images || [] }, signal);
-  },
-  publishVideo: async (serverUrl, params, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "publish-video", {
-        title: params.title,
-        content: params.content,
-        video: params.video,
-        tags: params.tags || []
-      }, signal);
-    }
-    return { success: false, error: "\u89C6\u9891\u53D1\u5E03\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
-  },
-  publishLongArticle: async (serverUrl, params, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "long-article", {
-        title: params.title,
-        content: params.content,
-        images: params.images || []
-      }, signal);
-    }
-    return { success: false, error: "\u957F\u6587\u53D1\u5E03\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
-  },
-  comment: async (serverUrl, noteUrl, content, xsecToken, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      const feedId = extractNoteIdFromUrl(noteUrl);
-      const token = xsecToken || extractXsecTokenFromUrl(noteUrl) || "";
-      return bridgePost(serverUrl, "post-comment", { feed_id: feedId, xsec_token: token, content }, signal);
-    }
-    const args = { url: noteUrl, content };
-    if (xsecToken) args.xsec_token = xsecToken;
-    return mcpCallTool(serverUrl, "comment", args, signal);
-  },
-  likeFeed: async (serverUrl, feedId, xsecToken, unlike = false, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "like-feed", { feed_id: feedId, xsec_token: xsecToken, unlike }, signal);
-    }
-    return mcpCallTool(serverUrl, "like_feed", { feed_id: feedId, xsec_token: xsecToken, ...unlike ? { unlike: true } : {} }, signal);
-  },
-  favoriteFeed: async (serverUrl, feedId, xsecToken, unfavorite = false, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "favorite-feed", { feed_id: feedId, xsec_token: xsecToken, unfavorite }, signal);
-    }
-    return mcpCallTool(serverUrl, "favorite_feed", { feed_id: feedId, xsec_token: xsecToken, ...unfavorite ? { unfavorite: true } : {} }, signal);
-  },
-  replyComment: async (serverUrl, feedId, xsecToken, content, commentId, userId, parentCommentId, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "reply-comment", {
-        feed_id: feedId,
-        xsec_token: xsecToken,
-        content,
-        comment_id: commentId,
-        user_id: userId
-      }, signal);
-    }
-    const args = { feed_id: feedId, xsec_token: xsecToken, content };
-    if (commentId) args.comment_id = commentId;
-    if (userId) args.user_id = userId;
-    if (parentCommentId) args.parent_comment_id = parentCommentId;
-    return mcpCallTool(serverUrl, "reply_comment", args, signal);
-  },
-  getUserProfile: async (serverUrl, userId, xsecToken, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") {
-      return bridgePost(serverUrl, "user-profile", { user_id: userId, xsec_token: xsecToken || "" }, signal);
-    }
-    const args = { user_id: userId };
-    if (xsecToken) args.xsec_token = xsecToken;
-    return mcpCallTool(serverUrl, "get_user_info", args, signal);
-  },
-  login: async (serverUrl, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") return bridgePost(serverUrl, "login", void 0, signal);
-    return { success: false, error: "\u767B\u5F55\u529F\u80FD\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
-  },
-  getQrcode: async (serverUrl, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") return bridgePost(serverUrl, "get-qrcode", void 0, signal);
-    return { success: false, error: "\u4E8C\u7EF4\u7801\u529F\u80FD\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
-  },
-  logout: async (serverUrl, signal) => {
-    signal?.throwIfAborted();
-    if (detectMode(serverUrl) === "bridge") return bridgePost(serverUrl, "delete-cookies", void 0, signal);
-    return { success: false, error: "\u767B\u51FA\u529F\u80FD\u4EC5\u5728 Skills (Bridge) \u6A21\u5F0F\u4E0B\u53EF\u7528" };
-  }
-};
-var extractNotesFromMcpData = (data) => {
-  if (!data) return [];
-  if (Array.isArray(data)) {
-    if (data.length > 0 && Array.isArray(data[0])) {
-      console.log(`[XHS] extractNotes: \u68C0\u6D4B\u5230\u5D4C\u5957\u6570\u7EC4\uFF0C\u5C55\u5E73 (${data.length} \u7EC4)`);
-      return data.flat().filter((n) => n && typeof n === "object" && !Array.isArray(n));
-    }
-    return data;
-  }
-  for (const key of ["notes", "items", "feeds", "data", "list", "results", "note_list", "noteList"]) {
-    if (Array.isArray(data[key])) {
-      const arr = data[key];
-      if (arr.length > 0 && Array.isArray(arr[0])) {
-        console.log(`[XHS] extractNotes: data.${key} \u662F\u5D4C\u5957\u6570\u7EC4\uFF0C\u5C55\u5E73`);
-        return arr.flat().filter((n) => n && typeof n === "object" && !Array.isArray(n));
-      }
-      return arr;
-    }
-  }
-  if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
-    for (const key of ["notes", "items", "feeds", "list", "results", "note_list", "noteList"]) {
-      if (Array.isArray(data.data[key])) {
-        console.log(`[XHS] extractNotes: \u4ECE data.data.${key} \u627E\u5230\u6570\u7EC4, length=${data.data[key].length}`);
-        return data.data[key];
-      }
-    }
-  }
-  if (typeof data === "object") {
-    const skipKeys = /* @__PURE__ */ new Set(["interactions", "tags", "images", "comments", "replies"]);
-    for (const [key, val] of Object.entries(data)) {
-      if (skipKeys.has(key)) continue;
-      if (Array.isArray(val) && val.length > 0) {
-        const first = val[0];
-        if (first && typeof first === "object" && (first.noteId || first.note_id || first.id || first.noteCard || first.displayTitle || first.title || first.desc || first.cover)) {
-          console.log(`[XHS] extractNotes: \u5728 key "${key}" \u4E2D\u627E\u5230\u7B14\u8BB0\u6570\u7EC4, length=${val.length}`);
-          return val;
-        }
-      }
-    }
-  }
-  if (typeof data === "string") {
-    console.warn("[XHS] extractNotes: data \u662F\u7EAF\u6587\u672C\uFF0C\u65E0\u6CD5\u63D0\u53D6\u7B14\u8BB0:", data.slice(0, 200));
-    return [];
-  }
-  console.warn("[XHS] extractNotes: \u672A\u627E\u5230\u7B14\u8BB0\u6570\u7EC4, data keys:", Object.keys(data));
-  return [];
-};
-var parseXhsCount = (value) => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
-  }
-  if (typeof value !== "string") return 0;
-  const normalized = value.trim().replace(/[,\s+]/g, "");
-  if (!normalized) return 0;
-  const match = normalized.match(/^(-?\d+(?:\.\d+)?)(万|億|亿|千|[kKmMwW])?/);
-  if (!match) return 0;
-  const base = Number(match[1]);
-  if (!Number.isFinite(base) || base < 0) return 0;
-  const unit = match[2]?.toLowerCase();
-  const multiplier = unit === "\u4E07" || unit === "w" ? 1e4 : unit === "\u5104" || unit === "\u4EBF" ? 1e8 : unit === "\u5343" || unit === "k" ? 1e3 : unit === "m" ? 1e6 : 1;
-  return Math.round(base * multiplier);
-};
-var firstArray = (...values) => {
-  for (const value of values) {
-    if (Array.isArray(value)) return value;
-  }
-  return void 0;
-};
-var normalizeXhsComments = (payload) => {
-  const root = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
-  const note = root.note || payload?.note || {};
-  const rawComments = firstArray(
-    root.comments?.list,
-    root.comments?.comment_list,
-    root.comment_list,
-    Array.isArray(root.comments) ? root.comments : void 0,
-    payload?.comments?.list,
-    payload?.comments?.comment_list,
-    payload?.comment_list,
-    Array.isArray(payload?.comments) ? payload.comments : void 0,
-    note.comments?.list,
-    note.comments?.comment_list,
-    note.comment_list,
-    Array.isArray(note.comments) ? note.comments : void 0
-  ) || [];
-  const normalizeComment = (comment, parentCommentId) => {
-    const user = comment?.userInfo || comment?.user_info || comment?.user || {};
-    const commentId = String(comment?.id || comment?.commentId || comment?.comment_id || "");
-    const replies = firstArray(
-      comment?.subComments,
-      comment?.sub_comments,
-      comment?.sub_comment_list,
-      comment?.replies
-    ) || [];
-    return {
-      commentId,
-      userId: String(user.userId || user.user_id || comment?.userId || comment?.user_id || ""),
-      author: String(
-        user.nickname || user.name || comment?.nickname || comment?.userName || comment?.user_name || comment?.author_name || comment?.author || "\u533F\u540D"
-      ),
-      content: String(comment?.content || "").trim(),
-      likes: parseXhsCount(comment?.likeCount ?? comment?.like_count ?? comment?.likes ?? 0),
-      parentCommentId,
-      subComments: replies.map((reply) => normalizeComment(reply, commentId || parentCommentId))
-    };
-  };
-  return rawComments.map((comment) => normalizeComment(comment));
-};
-var normalizeNote = (n) => {
-  const card = n.noteCard || n.note_card || n.notecard;
-  const coverObj = card?.cover || n.cover || n.image_list?.[0] || card?.image_list?.[0];
-  const rawCoverUrl = typeof coverObj === "string" ? coverObj : coverObj?.urlDefault || coverObj?.url_default || coverObj?.url || coverObj?.urlPre || coverObj?.info_list?.[0]?.url || void 0;
-  const coverUrl = rawCoverUrl?.replace(/^http:\/\//, "https://");
-  const interact = n.interact_info || n.interactInfo || card?.interact_info || card?.interactInfo || {};
-  const likesRaw = n.likes ?? n.liked_count ?? interact.liked_count ?? interact.likedCount ?? 0;
-  const collectsRaw = n.collects ?? n.collected_count ?? interact.collected_count ?? interact.collectedCount ?? 0;
-  const commentCountRaw = n.commentCount ?? n.comment_count ?? interact.comment_count ?? interact.commentCount ?? 0;
-  const shareCountRaw = n.shareCount ?? n.share_count ?? interact.share_count ?? interact.shareCount ?? 0;
-  return {
-    noteId: n.noteId || n.note_id || n.id || card?.note_id || card?.noteId || card?.noteId || "",
-    title: n.title || n.display_title || n.displayTitle || card?.display_title || card?.displayTitle || "",
-    desc: (n.desc || n.description || n.content || card?.desc || card?.description || card?.title || "").slice(0, 500),
-    author: n.author || n.nickname || n.user?.nickname || n.user?.name || card?.user?.nickname || card?.user?.name || "",
-    authorId: n.authorId || n.author_id || n.user?.user_id || n.user?.userId || card?.user?.user_id || card?.user?.userId || "",
-    likes: parseXhsCount(likesRaw),
-    collects: parseXhsCount(collectsRaw),
-    commentCount: parseXhsCount(commentCountRaw),
-    shareCount: parseXhsCount(shareCountRaw),
-    xsecToken: n.xsecToken || n.xsec_token || card?.xsec_token || card?.xsecToken || void 0,
-    coverUrl,
-    type: n.type || card?.type || void 0
-  };
-};
-var normalizeXhsLiteDetail = (payload, commentLimit = 15) => {
-  const root = payload?.data && typeof payload.data === "object" ? payload.data : payload || {};
-  const note = normalizeNote(root.note || payload?.note || payload || {});
-  const comments = [];
-  const appendComments = (items) => {
-    for (const item of items) {
-      if (comments.length >= commentLimit) return;
-      if (item.content) {
-        comments.push({
-          author: item.author,
-          content: item.content,
-          likes: item.likes,
-          commentId: item.commentId || void 0,
-          userId: item.userId || void 0
-        });
-      }
-      appendComments(item.subComments);
-    }
-  };
-  appendComments(normalizeXhsComments(payload));
-  const rawCommentArray = firstArray(
-    root.comments?.list,
-    root.comments?.comment_list,
-    root.comment_list,
-    Array.isArray(root.comments) ? root.comments : void 0
-  );
-  const explicitStatus = root.comments_status || root.comment_read_status || payload?.comments_status;
-  const commentError = root.comments_error || payload?.comments_error;
-  const commentReadStatus = comments.length > 0 || explicitStatus === "loaded" ? "loaded" : explicitStatus === "unavailable" || commentError ? "unavailable" : rawCommentArray ? "empty" : "not_requested";
-  return comments.length ? { ...note, comments, commentReadStatus } : { ...note, commentReadStatus };
-};
-
 // utils/agenticTools.ts
 function resolveXhsConfig(char, realtimeConfig) {
   const mcpConfig = realtimeConfig?.xhsMcpConfig;
@@ -16821,7 +17088,7 @@ function extractFriendFeedReplyTags(raw, namespace = "FRIEND_FEED_REPLY") {
   return { text: text2 + raw.slice(cursor), actions };
 }
 
-// node_modules/.pnpm/@rei-standard+amsg-instant@0.11.0-next.9/node_modules/@rei-standard/amsg-instant/dist/index.mjs
+// ../../../../Desktop/3005大豪宅/糯米鸡/node_modules/.pnpm/@rei-standard+amsg-instant@0.11.0-next.9/node_modules/@rei-standard/amsg-instant/dist/index.mjs
 var WEB_PUSH_MAX_BODY_BYTES2 = 4096;
 var WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES2 = 16 + 4 + 1 + 65 + 1 + 16;
 var MAX_PUSH_PAYLOAD_BYTES2 = WEB_PUSH_MAX_BODY_BYTES2 - WEB_PUSH_ENCRYPTION_OVERHEAD_BYTES2;
